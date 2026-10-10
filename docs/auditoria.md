@@ -1,17 +1,20 @@
-# Auditoria do repositório
+# Auditoria e decisões da migração
 
-Antes desta entrega, o repositório tinha apenas README e licença. A revisão da PR contra `main` verificou código, testes, CI, segurança das conexões e aderência aos SQLs e ao PDF fornecidos.
+O repositório partiu de README e licença. A entrega foi conferida contra os scripts SQL e o PDF fornecidos, sem alterá-los. O fluxo é `legado → app → staging → staging.pr_sync_legacy → tabelas normalizadas`.
 
-| Risco encontrado | Tratamento |
-| --- | --- |
-| Cópia literal não atenderia ao banco normalizado | Junções e tratamento de documentos, status e relacionamentos antes da carga; a procedure desmembra filial em segmento, endereço e unidade. |
-| IDs da massa demonstrativa conflitam com os do legado | `--check` e a validação do destino impedem sobrescrever uma identidade diferente. |
-| Falhas ou reexecuções poderiam duplicar dados | Lote transacional, `source_id` para atualização e erros em `staging.rpa_load_error`, inclusive antes da carga. |
-| Duas conexões sem responsável explícito | `DatabaseConnections` abre a origem somente leitura e encerra o destino primeiro, com rollback em exceções. |
-| Ausência de revisão reproduzível | Testes, CI, template de PR e commits por responsabilidade. |
+## Decisões de mapeamento
 
-**Limite do contrato:** a procedure de destino não recebe contratos, equipamentos nem manutenções. O banco final não tem tabela de contrato; os demais objetos exigem campos e papéis operacionais ausentes no legado. O robô informa as contagens e não cria dados fictícios.
+- O robô lê administradores, empresas, filiais e gerentes em uma transação `REPEATABLE READ READ ONLY`. Ele valida documentos, e-mails, status e referências antes de abrir o lote.
+- A procedure do banco final separa os dados da filial em `segment`, `address` e `company_unit`. `source_id` preserva a identidade do legado para reexecução sem duplicar entidades.
+- A massa demonstrativa do SQL final pode reutilizar `source_id` com outra identidade. Por isso, `--check` detecta colisões e o utilitário `app.schema_only` permite preparar um **banco novo** sem aquela massa. O arquivo derivado ainda contém comandos `DROP` do SQL original.
+- O contrato da procedure não recebe `contrato`, `inversor`, `string`, `painel` nem `manutencao`. O esquema final não possui tabela de contrato; equipamentos e manutenções requerem atributos e papéis operacionais que o legado não fornece. O robô mostra essas contagens e não fabrica dados para preencher lacunas.
 
-**Evidência:** em PostgreSQL 16 isolado, os SQLs imutáveis resultaram em 9/9 cadastros processados; uma segunda execução não duplicou entidades. Um CNPJ inválido na cópia descartável gerou lote `FAILED` (1/1), erro sem payload e nenhuma alteração nas contagens do destino. Também foram verificados um hash inválido com erro por registro e uma colisão de administrador barrada pelo `--check`. O CI executa testes sem provisionar os bancos de referência.
+## Carga e recuperação
 
-**Limite operacional:** falhas de validação em execução normal geram um lote `FAILED` com erro sem payload; o modo `--check` informa o problema sem gravar. Falhas de conexão ou SQL que invalidem a transação impedem registrar o lote e precisam ser consultadas no stderr.
+Um lock transacional impede duas cargas simultâneas no mesmo destino. Staging e procedure são confirmados na mesma transação; erro de conexão ou SQL desfaz essa transação. Falhas de validação na execução normal geram lote `FAILED` e registro em `staging.rpa_load_error`, sem guardar o conteúdo do registro. O modo `--check` não grava. Se a conexão falhar ou a transação do destino ficar inválida, não é possível registrar o lote ali; consulte a saída de erro do processo.
+
+Para recuperar uma carga, consulte `staging.rpa_load_batch` e `staging.rpa_load_error`, corrija o dado na fonte operacional ou a colisão no destino e execute novamente. As conexões são encerradas em ordem inversa; a origem permanece somente leitura. As URIs ficam no `.env` local, ignorado pelo Git.
+
+## Verificação realizada
+
+Em PostgreSQL 16 isolado, a migração dos scripts fornecidos processou 9/9 cadastros. A segunda execução manteve as mesmas contagens no destino. Um CNPJ inválido em uma cópia descartável do legado gerou lote `FAILED` (1/1), sem payload e sem alterar os cadastros já carregados. Também foram verificados hash inválido com erro por registro e colisão de administrador barrada pelo `--check`. Os testes automatizados cobrem transformação, preparação do esquema, colisão, falha de validação e encerramento das conexões; o CI executa esses testes e a verificação de sintaxe, sem provisionar PostgreSQL.
