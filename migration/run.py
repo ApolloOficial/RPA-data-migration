@@ -185,6 +185,24 @@ def load(target, records):
         return batch_id, status, total, processed, failed
 
 
+def record_validation_failure(target, error):
+    """Registra uma falha anterior à carga sem gravar o conteúdo do registro."""
+    match = re.search(r"(?:administrator|company_unit|company|manager):\d+\b", str(error))
+    source_key = match.group(0) if match else None
+    with target.cursor() as cursor:
+        cursor.execute(
+            "INSERT INTO staging.rpa_load_batch (source_system, status, finished_at) "
+            "VALUES ('CRUD_1ANO', 'FAILED', CURRENT_TIMESTAMP) RETURNING id"
+        )
+        batch_id = cursor.fetchone()[0]
+        cursor.execute(
+            "INSERT INTO staging.rpa_load_error "
+            "(load_batch_id, source_record_key, error_message) VALUES (%s, %s, %s)",
+            (batch_id, source_key, str(error)),
+        )
+    return batch_id
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Migrate legacy Apollo registration data")
     parser.add_argument("--check", action="store_true", help="validate and count without writing")
@@ -196,8 +214,15 @@ def main(argv=None):
         parser.error("LEGACY_DATABASE_URL and TARGET_DATABASE_URL must be set")
     try:
         with DatabaseConnections(legacy_dsn, target_dsn) as databases:
-            records, user_types, outside_contract = extract(databases.source)
-            preflight(databases.target, records)
+            try:
+                records, user_types, outside_contract = extract(databases.source)
+                preflight(databases.target, records)
+            except ValueError as exc:
+                print(f"Migration stopped: {exc}", file=sys.stderr)
+                if not args.check:
+                    batch_id = record_validation_failure(databases.target, exc)
+                    print(f"Validation failure recorded in batch {batch_id}", file=sys.stderr)
+                return 1
             counts = ", ".join(f"{key}={len(rows)}" for key, rows in records.items())
             excluded = sum(count for name, count in user_types.items() if name not in ("ADMINISTRADOR", "GERENTE"))
             print(f"Legacy snapshot: {counts}; other user roles excluded={excluded}")

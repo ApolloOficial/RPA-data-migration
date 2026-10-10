@@ -35,7 +35,7 @@ python -m migration --check
 python -m migration
 ```
 
-**Use o SQL derivado somente em banco novo ou descartável:** ele preserva comandos `DROP` do original. O `--check` valida relações e colisões de identidade sem gravar. Na execução, a origem usa transação somente leitura; o destino confirma o lote completo ou desfaz a escrita em caso de erro. Código de saída `0` indica lote concluído, `2` indica registros rejeitados pela procedure e `1` indica falha antes da confirmação. Consulte `staging.rpa_load_batch` e `staging.rpa_load_error` para investigar e reexecute após corrigir a fonte ou a colisão.
+**Use o SQL derivado somente em banco novo ou descartável:** ele preserva comandos `DROP` do original. O `--check` valida relações e colisões de identidade sem gravar. Na execução, a origem usa transação somente leitura; o destino confirma ou desfaz a carga como uma transação. Uma validação inválida gera lote `FAILED` e erro sem dados pessoais; `--check` continua sem gravar. Código de saída `0` indica lote concluído, `2` indica registros rejeitados pela procedure e `1` indica falha antes da carga. Consulte `staging.rpa_load_batch` e `staging.rpa_load_error` e reexecute após corrigir a origem ou a colisão.
 
 ## Estrutura e qualidade
 

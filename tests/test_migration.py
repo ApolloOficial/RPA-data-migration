@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import patch
 
 from migration.database import DatabaseConnections
-from migration.run import preflight, transform
+from migration.run import preflight, record_validation_failure, transform
 from migration.schema_only import schema_only
 
 
@@ -98,6 +98,34 @@ class PreflightTests(unittest.TestCase):
                    "company": [], "company_unit": [], "manager": []}
         with self.assertRaisesRegex(ValueError, "source_id collision"):
             preflight(Target(), records)
+
+
+class AuditTests(unittest.TestCase):
+    def test_validation_failure_creates_failed_batch_without_source_payload(self):
+        executed = []
+
+        class Cursor:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_):
+                pass
+
+            def execute(self, query, params=None):
+                executed.append((query, params))
+
+            def fetchone(self):
+                return (42,)
+
+        class Target:
+            def cursor(self):
+                return Cursor()
+
+        batch_id = record_validation_failure(Target(), ValueError("company:7 has invalid cnpj"))
+        self.assertEqual(batch_id, 42)
+        self.assertIn("'FAILED'", executed[0][0])
+        self.assertEqual(executed[1][1], (42, "company:7", "company:7 has invalid cnpj"))
+        self.assertNotIn("source_payload", executed[1][0])
 
 
 class DatabaseConnectionTests(unittest.TestCase):
