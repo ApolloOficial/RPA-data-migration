@@ -1,6 +1,27 @@
 # 🤖 RPA Data Migration — Apollo
 
-Transfere cadastros do PostgreSQL legado do 1º ano para o banco normalizado do 2º ano. O robô extrai uma visão consistente, trata os campos, envia um lote para `staging` e chama a procedure `staging.pr_sync_legacy` do banco final. A procedure resolve os relacionamentos e grava nas tabelas normalizadas. Os SQLs e o PDF fornecidos são referências imutáveis.
+<p align="center">
+  <strong>Migração auditável dos cadastros legados para o banco normalizado Apollo</strong>
+</p>
+
+<p align="center">
+  <a href="https://github.com/ApolloOficial/RPA-data-migration/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/ApolloOficial/RPA-data-migration/actions/workflows/ci.yml/badge.svg"></a>
+  <img alt="Python 3.12+" src="https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white">
+  <img alt="PostgreSQL" src="https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white">
+</p>
+
+O RPA transfere cadastros do PostgreSQL legado do 1º ano para o banco normalizado do 2º ano. Ele trata os dados antes de enviá-los à área de `staging`; a procedure do banco final resolve as relações e grava nas tabelas normalizadas. Os scripts SQL e o PDF fornecidos são referências imutáveis.
+
+## Como funciona
+
+- **Origem:** uma conexão somente leitura obtém uma visão consistente do legado.
+- **Tratamento:** o robô reúne tabelas, normaliza campos e valida referências e colisões de identidade.
+- **Destino:** o RPA registra o lote em `staging` e chama `staging.pr_sync_legacy(id_do_lote)`; a procedure distribui os registros pelas tabelas finais.
+- **Auditoria:** lote e erros ficam em `staging.rpa_load_batch` e `staging.rpa_load_error`. A carga é transacional e pode ser reexecutada.
+
+```text
+Legado → extração e tratamento → staging → pr_sync_legacy → tabelas normalizadas
+```
 
 ## Mapeamento
 
@@ -39,8 +60,14 @@ python -m app
 
 **Use o SQL derivado somente em banco novo ou descartável:** ele preserva comandos `DROP` do original. O `--check` valida relações e colisões de identidade sem gravar. Na execução, a origem usa transação somente leitura; o destino confirma ou desfaz a carga como uma transação. Uma validação inválida gera lote `FAILED` e erro sem dados pessoais; `--check` continua sem gravar. Código de saída `0` indica lote concluído, `2` indica registros rejeitados pela procedure e `1` indica falha antes da carga. Consulte `staging.rpa_load_batch` e `staging.rpa_load_error` e reexecute após corrigir a origem ou a colisão.
 
-## Estrutura e qualidade
+## Testes
 
-`app/database.py` conecta e encerra os dois bancos; `app/migration.py` faz o mapeamento e a carga; `app/main.py` executa o fluxo; `app/schema_only.py` prepara o esquema sem os dados de demonstração. Execute `python -m unittest discover -s tests -v`; o CI repete os testes e a verificação de sintaxe em branches `feat/**` e PRs para `main`.
+```powershell
+python -m unittest discover -s tests -v
+```
 
-As decisões e os limites da carga estão em [docs/auditoria.md](docs/auditoria.md). O robô pode rodar sob demanda ou agendado em um ambiente com acesso aos dois bancos; a exigência de cloud e containers do interdisciplinar se aplica à infraestrutura do projeto, sem exigir um serviço próprio e permanente para este processo.
+O CI executa os testes e verifica a sintaxe em branches `feat/**` e PRs para `main`.
+
+## Documentação
+
+Veja as [decisões de mapeamento, evidências e limites da carga](docs/auditoria.md). O robô pode rodar sob demanda ou agendado em um ambiente com acesso aos dois bancos; não exige um serviço permanente próprio na cloud.
