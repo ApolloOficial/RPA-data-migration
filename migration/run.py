@@ -1,11 +1,13 @@
-"""Read a consistent legacy snapshot and invoke the destination ETL procedure."""
+"""Lê uma visão consistente do legado e aciona a procedure de destino."""
 
 import argparse
 import os
 import re
 import sys
+from pathlib import Path
 
 import psycopg
+from dotenv import load_dotenv
 
 from .database import DatabaseConnections
 
@@ -74,7 +76,7 @@ def required(value, table, source_id, field):
 
 
 def transform(table, row):
-    """Map legacy names, states and document formats to staging fields."""
+    """Converte nomes, status e documentos para os campos de staging."""
     source_id = row["source_id"]
     item = dict(row)
     status = item.pop("status")
@@ -129,12 +131,12 @@ def extract(source):
 
 
 def preflight(target, records):
-    """Protect source_id namespaces when the supplied destination has demo data."""
+    """Evita colisões de source_id com dados de demonstração do destino."""
     checks = (
         ("administrator", "administrator", "cpf"),
         ("company", "company", "cnpj"),
         ("company_unit", "company_unit", "cnpj"),
-        # The destination employee has no CPF; email identifies an existing manager.
+        # O empregado no destino não tem CPF; o e-mail identifica um gerente existente.
         ("manager", "employee", "email"),
     )
     with target.cursor() as cursor:
@@ -187,6 +189,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="Migrate legacy Apollo registration data")
     parser.add_argument("--check", action="store_true", help="validate and count without writing")
     args = parser.parse_args(argv)
+    load_dotenv(Path(__file__).resolve().parent.parent / ".env")
     legacy_dsn = os.getenv("LEGACY_DATABASE_URL")
     target_dsn = os.getenv("TARGET_DATABASE_URL")
     if not legacy_dsn or not target_dsn:
