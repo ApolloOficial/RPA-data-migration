@@ -12,6 +12,6 @@ Antes desta entrega, o repositório tinha apenas README e licença. A revisão d
 
 **Limite do contrato:** a procedure de destino não recebe contratos, equipamentos nem manutenções. O banco final não tem tabela de contrato; os demais objetos exigem campos e papéis operacionais ausentes no legado. O robô informa as contagens e não cria dados fictícios.
 
-**Evidência:** em PostgreSQL 16 isolado, os SQLs imutáveis resultaram em 9/9 cadastros processados; uma segunda execução não duplicou entidades. Um hash inválido gerou 1 erro por registro, e uma colisão de administrador foi barrada pelo `--check`. O CI executa testes sem provisionar os bancos de referência.
+**Evidência:** em PostgreSQL 16 isolado, os SQLs imutáveis resultaram em 9/9 cadastros processados; uma segunda execução não duplicou entidades. Um CNPJ inválido na cópia descartável gerou lote `FAILED` (1/1), erro sem payload e nenhuma alteração nas contagens do destino. Também foram verificados um hash inválido com erro por registro e uma colisão de administrador barrada pelo `--check`. O CI executa testes sem provisionar os bancos de referência.
 
 **Limite operacional:** falhas de validação em execução normal geram um lote `FAILED` com erro sem payload; o modo `--check` informa o problema sem gravar. Falhas de conexão ou SQL que invalidem a transação impedem registrar o lote e precisam ser consultadas no stderr.
