@@ -1,1 +1,1 @@
-"""Transport legacy Apollo registration data into the second-year staging contract."""
+"""Transporta cadastros legados do Apollo para o staging do segundo ano."""

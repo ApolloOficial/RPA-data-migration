@@ -38,6 +38,15 @@
 <!-- Ex.: python -m unittest discover -s tests -v -->
 ```
 
+## Impacto
+
+> Marque os impactos aplicáveis substituindo `⬜` por `✅`.
+
+- ⬜ Dados do banco normalizado
+- ⬜ Documentação
+- ⬜ Infraestrutura ou configuração
+- ⬜ Não há impacto externo
+
 ## Checklist
 
 - ⬜ Scripts SQL e PDF de referência preservados

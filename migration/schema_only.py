@@ -1,4 +1,4 @@
-"""Derive an empty operational destination from the immutable supplied SQL."""
+"""Deriva um destino operacional vazio do SQL original imutável."""
 
 import argparse
 import sys

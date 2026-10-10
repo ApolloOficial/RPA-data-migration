@@ -1,4 +1,4 @@
-"""Own the legacy read transaction and the destination write transaction."""
+"""Gerencia as transações de leitura do legado e de escrita no destino."""
 
 from contextlib import ExitStack
 
@@ -6,7 +6,7 @@ import psycopg
 
 
 class DatabaseConnections:
-    """Open both databases and close them in reverse order on every exit path."""
+    """Abre os dois bancos e encerra as conexões na ordem inversa."""
 
     def __init__(self, legacy_url, target_url):
         self.legacy_url = legacy_url
