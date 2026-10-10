@@ -1,15 +1,6 @@
-"""Lê uma visão consistente do legado e aciona a procedure de destino."""
+"""Extrai, transforma e carrega os cadastros legados no banco final."""
 
-import argparse
-import os
 import re
-import sys
-from pathlib import Path
-
-import psycopg
-from dotenv import load_dotenv
-
-from .database import DatabaseConnections
 
 
 SOURCE_QUERIES = {
@@ -62,20 +53,20 @@ STAGING_COLUMNS = {
 }
 
 
-def digits(value, length, table, source_id, field):
+def normalize_digits(value, length, table, source_id, field):
     normalized = re.sub(r"[^0-9]", "", value or "")
     if len(normalized) != length:
         raise ValueError(f"{table}:{source_id} has invalid {field}; expected {length} digits")
     return normalized
 
 
-def required(value, table, source_id, field):
+def require_text(value, table, source_id, field):
     if value is None or not str(value).strip():
         raise ValueError(f"{table}:{source_id} has empty {field}")
     return str(value).strip()
 
 
-def transform(table, row):
+def normalize_legacy_row(table, row):
     """Converte nomes, status e documentos para os campos de staging."""
     source_id = row["source_id"]
     item = dict(row)
@@ -85,29 +76,29 @@ def transform(table, row):
     item["is_active"] = status == "ATIVO"
     if table in ("administrator", "manager"):
         item["user_type"] = "ADMINISTRADOR" if table == "administrator" else "GERENTE"
-        item["cpf"] = digits(item["cpf"], 11, table, source_id, "cpf")
+        item["cpf"] = normalize_digits(item["cpf"], 11, table, source_id, "cpf")
     if table in ("company", "company_unit"):
-        item["cnpj"] = digits(item["cnpj"], 14, table, source_id, "cnpj")
+        item["cnpj"] = normalize_digits(item["cnpj"], 14, table, source_id, "cnpj")
     for field in ("email", "contact_email"):
         if field in item:
-            item[field] = required(item[field], table, source_id, field).lower()
+            item[field] = require_text(item[field], table, source_id, field).lower()
     if table == "company_unit":
-        item["zip_code"] = digits(item["zip_code"], 8, table, source_id, "zip_code")
-        item["state"] = required(item["state"], table, source_id, "state").upper()
-        item["phone"] = required(item["phone"], table, source_id, "phone")
+        item["zip_code"] = normalize_digits(item["zip_code"], 8, table, source_id, "zip_code")
+        item["state"] = require_text(item["state"], table, source_id, "state").upper()
+        item["phone"] = require_text(item["phone"], table, source_id, "phone")
     if table != "administrator" and item["registered_by_source_id"] is None:
         raise ValueError(f"{table}:{source_id} has no registering administrator")
     return item
 
 
-def extract(source):
+def extract_legacy_snapshot(source):
     from psycopg.rows import dict_row
 
     result = {}
     with source.cursor(row_factory=dict_row) as cursor:
         for table, query in SOURCE_QUERIES.items():
             cursor.execute(query)
-            result[table] = [transform(table, row) for row in cursor.fetchall()]
+            result[table] = [normalize_legacy_row(table, row) for row in cursor.fetchall()]
         cursor.execute("SELECT t.nome, count(*) AS total FROM usuario u JOIN tipo_usuario t ON t.id = u.id_tipo_usuario GROUP BY t.nome")
         user_types = {row["nome"]: row["total"] for row in cursor.fetchall()}
         cursor.execute("SELECT 'contrato' AS name, count(*) AS total FROM contrato UNION ALL "
@@ -130,7 +121,7 @@ def extract(source):
     return result, user_types, outside_contract
 
 
-def preflight(target, records):
+def validate_target_for_migration(target, records):
     """Evita colisões de source_id com dados de demonstração do destino."""
     checks = (
         ("administrator", "administrator", "cpf"),
@@ -161,7 +152,7 @@ def preflight(target, records):
                     )
 
 
-def load(target, records):
+def load_staging_batch(target, records):
     tables = {"administrator": "legacy_user", "manager": "legacy_user",
               "company": "legacy_company", "company_unit": "legacy_company_unit"}
     with target.cursor() as cursor:
@@ -185,14 +176,15 @@ def load(target, records):
         return batch_id, status, total, processed, failed
 
 
-def record_validation_failure(target, error):
+def record_failed_batch(target, error):
     """Registra uma falha anterior à carga sem gravar o conteúdo do registro."""
     match = re.search(r"(?:administrator|company_unit|company|manager):\d+\b", str(error))
     source_key = match.group(0) if match else None
     with target.cursor() as cursor:
         cursor.execute(
-            "INSERT INTO staging.rpa_load_batch (source_system, status, finished_at) "
-            "VALUES ('CRUD_1ANO', 'FAILED', CURRENT_TIMESTAMP) RETURNING id"
+            "INSERT INTO staging.rpa_load_batch "
+            "(source_system, status, finished_at, total_records, failed_records) "
+            "VALUES ('CRUD_1ANO', 'FAILED', CURRENT_TIMESTAMP, 1, 1) RETURNING id"
         )
         batch_id = cursor.fetchone()[0]
         cursor.execute(
@@ -201,42 +193,3 @@ def record_validation_failure(target, error):
             (batch_id, source_key, str(error)),
         )
     return batch_id
-
-
-def main(argv=None):
-    parser = argparse.ArgumentParser(description="Migrate legacy Apollo registration data")
-    parser.add_argument("--check", action="store_true", help="validate and count without writing")
-    args = parser.parse_args(argv)
-    load_dotenv(Path(__file__).resolve().parent.parent / ".env")
-    legacy_dsn = os.getenv("LEGACY_DATABASE_URL")
-    target_dsn = os.getenv("TARGET_DATABASE_URL")
-    if not legacy_dsn or not target_dsn:
-        parser.error("LEGACY_DATABASE_URL and TARGET_DATABASE_URL must be set")
-    try:
-        with DatabaseConnections(legacy_dsn, target_dsn) as databases:
-            try:
-                records, user_types, outside_contract = extract(databases.source)
-                preflight(databases.target, records)
-            except ValueError as exc:
-                print(f"Migration stopped: {exc}", file=sys.stderr)
-                if not args.check:
-                    batch_id = record_validation_failure(databases.target, exc)
-                    print(f"Validation failure recorded in batch {batch_id}", file=sys.stderr)
-                return 1
-            counts = ", ".join(f"{key}={len(rows)}" for key, rows in records.items())
-            excluded = sum(count for name, count in user_types.items() if name not in ("ADMINISTRADOR", "GERENTE"))
-            print(f"Legacy snapshot: {counts}; other user roles excluded={excluded}")
-            print("Outside destination RPA contract: " + ", ".join(
-                f"{name}={count}" for name, count in outside_contract.items()
-            ))
-            if args.check:
-                return 0
-            batch_id, status, total, processed, failed = load(databases.target, records)
-        print(f"Batch {batch_id}: {status}; total={total}, processed={processed}, failed={failed}")
-        if failed:
-            print(f"Inspect staging.rpa_load_error for batch {batch_id}", file=sys.stderr)
-            return 2
-        return 0
-    except (ValueError, psycopg.Error) as exc:
-        print(f"Migration stopped: {exc}", file=sys.stderr)
-        return 1

@@ -5,7 +5,7 @@ Antes desta entrega, o repositório tinha apenas README e licença. A revisão d
 | Risco encontrado | Tratamento |
 | --- | --- |
 | Cópia literal não atenderia ao banco normalizado | Junções e tratamento de documentos, status e relacionamentos antes da carga; a procedure desmembra filial em segmento, endereço e unidade. |
-| IDs da massa demonstrativa conflitam com os do legado | `--check` e preflight impedem sobrescrever uma identidade diferente. |
+| IDs da massa demonstrativa conflitam com os do legado | `--check` e a validação do destino impedem sobrescrever uma identidade diferente. |
 | Falhas ou reexecuções poderiam duplicar dados | Lote transacional, `source_id` para atualização e erros em `staging.rpa_load_error`, inclusive antes da carga. |
 | Duas conexões sem responsável explícito | `DatabaseConnections` abre a origem somente leitura e encerra o destino primeiro, com rollback em exceções. |
 | Ausência de revisão reproduzível | Testes, CI, template de PR e commits por responsabilidade. |

@@ -29,16 +29,16 @@ Preencha **`.env` na raiz do repositório** com as URIs reais `LEGACY_DATABASE_U
 Antes da primeira carga, prepare bancos novos e isolados com os scripts fornecidos. O SQL final contém dados demonstrativos com `source_id` conflitantes; para criar apenas o esquema e os dados de referência, derive um arquivo temporário:
 
 ```powershell
-python -m migration.schema_only "C:\caminho\Script_SQL_Apollo_2ano.sql" schema-only.sql
+python -m app.schema_only "C:\caminho\Script_SQL_Apollo_2ano.sql" schema-only.sql
 psql -X -v ON_ERROR_STOP=1 -d "postgresql://usuario@host/banco_novo" -f schema-only.sql
-python -m migration --check
-python -m migration
+python -m app --check
+python -m app
 ```
 
 **Use o SQL derivado somente em banco novo ou descartável:** ele preserva comandos `DROP` do original. O `--check` valida relações e colisões de identidade sem gravar. Na execução, a origem usa transação somente leitura; o destino confirma ou desfaz a carga como uma transação. Uma validação inválida gera lote `FAILED` e erro sem dados pessoais; `--check` continua sem gravar. Código de saída `0` indica lote concluído, `2` indica registros rejeitados pela procedure e `1` indica falha antes da carga. Consulte `staging.rpa_load_batch` e `staging.rpa_load_error` e reexecute após corrigir a origem ou a colisão.
 
 ## Estrutura e qualidade
 
-`migration/database.py` gerencia as duas conexões; `migration/run.py` faz o mapeamento e a carga; `migration/schema_only.py` prepara o esquema sem os dados de demonstração. Execute `python -m unittest discover -s tests -v`; o CI repete os testes e a verificação de sintaxe em branches `feat/**` e PRs para `main`.
+`app/database.py` conecta e encerra os dois bancos; `app/migration.py` faz o mapeamento e a carga; `app/main.py` executa o fluxo; `app/schema_only.py` prepara o esquema sem os dados de demonstração. Execute `python -m unittest discover -s tests -v`; o CI repete os testes e a verificação de sintaxe em branches `feat/**` e PRs para `main`.
 
 As decisões e os limites da carga estão em [docs/auditoria.md](docs/auditoria.md). O robô pode rodar sob demanda ou agendado em um ambiente com acesso aos dois bancos; a exigência de cloud e containers do interdisciplinar se aplica à infraestrutura do projeto, sem exigir um serviço próprio e permanente para este processo.
