@@ -5,6 +5,10 @@ import os
 import re
 import sys
 
+import psycopg
+
+from .database import DatabaseConnections
+
 
 SOURCE_QUERIES = {
     "administrator": """
@@ -130,7 +134,7 @@ def preflight(target, records):
         ("administrator", "administrator", "cpf"),
         ("company", "company", "cnpj"),
         ("company_unit", "company_unit", "cnpj"),
-        # ponytail: employee has no CPF; email changes require identity review before retry.
+        # The destination employee has no CPF; email identifies an existing manager.
         ("manager", "employee", "email"),
     )
     with target.cursor() as cursor:
@@ -188,22 +192,18 @@ def main(argv=None):
     if not legacy_dsn or not target_dsn:
         parser.error("LEGACY_DATABASE_URL and TARGET_DATABASE_URL must be set")
     try:
-        import psycopg
-
-        with psycopg.connect(legacy_dsn) as source:
-            source.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
-            records, user_types, outside_contract = extract(source)
-            with psycopg.connect(target_dsn) as target:
-                preflight(target, records)
-                counts = ", ".join(f"{key}={len(rows)}" for key, rows in records.items())
-                excluded = sum(count for name, count in user_types.items() if name not in ("ADMINISTRADOR", "GERENTE"))
-                print(f"Legacy snapshot: {counts}; other user roles excluded={excluded}")
-                print("Outside destination RPA contract: " + ", ".join(
-                    f"{name}={count}" for name, count in outside_contract.items()
-                ))
-                if args.check:
-                    return 0
-                batch_id, status, total, processed, failed = load(target, records)
+        with DatabaseConnections(legacy_dsn, target_dsn) as databases:
+            records, user_types, outside_contract = extract(databases.source)
+            preflight(databases.target, records)
+            counts = ", ".join(f"{key}={len(rows)}" for key, rows in records.items())
+            excluded = sum(count for name, count in user_types.items() if name not in ("ADMINISTRADOR", "GERENTE"))
+            print(f"Legacy snapshot: {counts}; other user roles excluded={excluded}")
+            print("Outside destination RPA contract: " + ", ".join(
+                f"{name}={count}" for name, count in outside_contract.items()
+            ))
+            if args.check:
+                return 0
+            batch_id, status, total, processed, failed = load(databases.target, records)
         print(f"Batch {batch_id}: {status}; total={total}, processed={processed}, failed={failed}")
         if failed:
             print(f"Inspect staging.rpa_load_error for batch {batch_id}", file=sys.stderr)
