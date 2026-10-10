@@ -218,3 +218,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Derived locally from the immutable destination SQL
+schema-only.sql
