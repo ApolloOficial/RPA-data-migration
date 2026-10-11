@@ -10,7 +10,7 @@
   <img alt="PostgreSQL" src="https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white">
 </p>
 
-O RPA transfere cadastros do PostgreSQL legado do 1º ano para o banco normalizado do 2º ano. Ele trata os dados antes de enviá-los à área de `staging`; a procedure do banco final resolve as relações e grava nas tabelas normalizadas. Os scripts SQL e o PDF fornecidos são referências imutáveis.
+O RPA transfere cadastros do PostgreSQL legado do 1º ano para o banco normalizado do 2º ano. Ele trata os dados antes de enviá-los à área de `staging`; a procedure do banco final resolve as relações e grava nas tabelas normalizadas.
 
 ## Como funciona
 
@@ -49,16 +49,17 @@ Copy-Item .env.example .env
 
 Preencha **`.env` na raiz do repositório** com as URIs reais `LEGACY_DATABASE_URL` e `TARGET_DATABASE_URL`. O arquivo é ignorado pelo Git. Use uma conta somente leitura no legado; a conta de destino precisa executar a procedure e gravar nas tabelas que ela atualiza. Para servidores remotos, inclua `?sslmode=require` na URI quando exigido pelo provedor.
 
-Antes da primeira carga, prepare bancos novos e isolados com os scripts fornecidos. O SQL final contém dados demonstrativos com `source_id` conflitantes; para criar apenas o esquema e os dados de referência, derive um arquivo temporário:
+Antes da primeira carga, prepare bancos novos e isolados com os scripts da entrega de Modelagem de Dados. O SQL final reserva `source_id` negativos para os cadastros demonstrativos; os IDs positivos ficam disponíveis para o legado. Execute o dataload **antes** do RPA: ele reinicia tabelas e apagaria uma migração anterior.
 
 ```powershell
-python -m app.schema_only "C:\caminho\Script_SQL_Apollo_2ano.sql" schema-only.sql
-psql -X -v ON_ERROR_STOP=1 -d "postgresql://usuario@host/banco_novo" -f schema-only.sql
+psql -X -v ON_ERROR_STOP=1 -d "postgresql://usuario@host/banco_legado" -f "C:\caminho\script-primeiro-ano.sql"
+psql -X -v ON_ERROR_STOP=1 -d "postgresql://usuario@host/banco_novo" -f "C:\caminho\Script_SQL_Apollo_2ano.sql"
+psql -X -v ON_ERROR_STOP=1 -d "postgresql://usuario@host/banco_novo" -f "C:\caminho\Dataload_Apollo_2ano.sql"
 python -m app --check
 python -m app
 ```
 
-**Use o SQL derivado somente em banco novo ou descartável:** ele preserva comandos `DROP` do original. O `--check` valida relações e colisões de identidade sem gravar. Na execução, a origem usa transação somente leitura; o destino confirma ou desfaz a carga como uma transação. Uma validação inválida gera lote `FAILED` e erro sem dados pessoais; `--check` continua sem gravar. Código de saída `0` indica lote concluído, `2` indica registros rejeitados pela procedure e `1` indica falha antes da carga. Consulte `staging.rpa_load_batch` e `staging.rpa_load_error` e reexecute após corrigir a origem ou a colisão.
+**Os scripts de criação e dataload reiniciam o banco:** execute-os apenas na preparação de um ambiente novo ou descartável. O `--check` valida relações e colisões de identidade sem gravar. Na execução, a origem usa transação somente leitura; o destino confirma ou desfaz a carga como uma transação. Uma validação inválida gera lote `FAILED` e erro sem dados pessoais. Código de saída `0` indica lote concluído, `2` indica registros rejeitados pela procedure e `1` indica falha antes da carga. Consulte `staging.rpa_load_batch` e `staging.rpa_load_error` e reexecute após corrigir a origem ou a colisão.
 
 ## Testes
 

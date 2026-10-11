@@ -1,12 +1,12 @@
 # Auditoria e decisões da migração
 
-O repositório partiu de README e licença. A entrega foi conferida contra os scripts SQL e o PDF fornecidos, sem alterá-los. O fluxo é `legado → app → staging → staging.pr_sync_legacy → tabelas normalizadas`.
+O fluxo é `legado → app → staging → staging.pr_sync_legacy → tabelas normalizadas`. A documentação dos scripts finais, modelo e testes fica no diretório de entrega de Modelagem de Dados.
 
 ## Decisões de mapeamento
 
 - O robô lê administradores, empresas, filiais e gerentes em uma transação `REPEATABLE READ READ ONLY`. Ele valida documentos, e-mails, status e referências antes de abrir o lote.
 - A procedure do banco final separa os dados da filial em `segment`, `address` e `company_unit`. `source_id` preserva a identidade do legado para reexecução sem duplicar entidades.
-- A massa demonstrativa do SQL final pode reutilizar `source_id` com outra identidade. Por isso, `--check` detecta colisões e o utilitário `app.schema_only` permite preparar um **banco novo** sem aquela massa. O arquivo derivado ainda contém comandos `DROP` do SQL original.
+- Os cadastros demonstrativos do SQL final usam `source_id` negativos, reservando IDs positivos para o legado. O `--check` continua detectando colisões reais de identidade. O utilitário `app.schema_only` permanece disponível para testes de esquema vazio, mas não é necessário no fluxo de entrega.
 - O contrato da procedure não recebe `contrato`, `inversor`, `string`, `painel` nem `manutencao`. O esquema final não possui tabela de contrato; equipamentos e manutenções requerem atributos e papéis operacionais que o legado não fornece. O robô mostra essas contagens e não fabrica dados para preencher lacunas.
 
 ## Carga e recuperação
@@ -17,4 +17,4 @@ Para recuperar uma carga, consulte `staging.rpa_load_batch` e `staging.rpa_load_
 
 ## Verificação realizada
 
-Em PostgreSQL 16 isolado, a migração dos scripts fornecidos processou 9/9 cadastros. A segunda execução manteve as mesmas contagens no destino. Um CNPJ inválido em uma cópia descartável do legado gerou lote `FAILED` (1/1), sem payload e sem alterar os cadastros já carregados. Também foram verificados hash inválido com erro por registro e colisão de administrador barrada pelo `--check`. Os testes automatizados cobrem transformação, preparação do esquema, colisão, falha de validação e encerramento das conexões; o CI executa esses testes e a verificação de sintaxe, sem provisionar PostgreSQL.
+Em PostgreSQL 16 isolado, o SQL final, o dataload e a migração foram executados nessa ordem. O RPA processou 9/9 cadastros em duas execuções, mantendo as mesmas contagens no destino. Um CNPJ inválido em uma cópia descartável do legado gerou lote `FAILED` (1/1), sem payload e sem alterar os cadastros já carregados. Também foram verificados hash inválido com erro por registro e colisão de administrador barrada pelo `--check`. Os testes automatizados cobrem transformação, preparação do esquema, colisão, falha de validação e encerramento das conexões; o CI executa esses testes e a verificação de sintaxe, sem provisionar PostgreSQL.
