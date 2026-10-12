@@ -7,6 +7,8 @@ from unittest.mock import patch
 from app.database import DatabaseConnections
 from app.main import main
 from app.migration import (
+    extract_legacy_snapshot,
+    load_staging_batch,
     normalize_legacy_row,
     record_failed_batch,
     validate_target_for_migration,
@@ -15,6 +17,27 @@ from app.schema_only import derive_schema_without_demo_data
 
 
 class MappingTests(unittest.TestCase):
+    def test_empty_legacy_snapshot_is_rejected(self):
+        class Cursor:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_):
+                pass
+
+            def execute(self, *_):
+                pass
+
+            def fetchall(self):
+                return []
+
+        class Source:
+            def cursor(self, **_):
+                return Cursor()
+
+        with self.assertRaisesRegex(ValueError, "no records"):
+            extract_legacy_snapshot(Source())
+
     def test_manager_is_normalized_without_rehashing_password(self):
         password = "$2b$10$" + "a" * 53
         row = normalize_legacy_row("manager", {
@@ -77,7 +100,9 @@ class DestinationSetupTests(unittest.TestCase):
 
 
 class PreflightTests(unittest.TestCase):
-    def test_existing_source_id_with_different_identity_is_rejected(self):
+    def test_preflight_checks_destination_prerequisites_without_identity_lookup(self):
+        queries = []
+
         class Cursor:
             def __enter__(self):
                 return self
@@ -87,6 +112,7 @@ class PreflightTests(unittest.TestCase):
 
             def execute(self, query):
                 self.query = query
+                queries.append(query)
 
             def fetchone(self):
                 if "pg_try_advisory" in self.query:
@@ -95,20 +121,71 @@ class PreflightTests(unittest.TestCase):
                     return ("staging.pr_sync_legacy(bigint)",)
                 return (1,)
 
-            def fetchall(self):
-                return [(1, "99999999999")] if "FROM administrator" in self.query else []
+        class Target:
+            def cursor(self):
+                return Cursor()
+
+        validate_target_for_migration(Target())
+        self.assertEqual(len(queries), 3)
+        self.assertFalse(any("source_id" in query for query in queries))
+
+
+class AuditTests(unittest.TestCase):
+    def test_load_clears_error_payload_before_returning_batch(self):
+        executed = []
+
+        class Cursor:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_):
+                pass
+
+            def execute(self, query, params=None):
+                executed.append((query, params))
+
+            def executemany(self, *_):
+                pass
+
+            def fetchone(self):
+                return (17,) if len(executed) == 1 else ("FAILED", 1, 0, 1)
 
         class Target:
             def cursor(self):
                 return Cursor()
 
-        records = {"administrator": [{"source_id": 1, "cpf": "11111111111"}],
-                   "company": [], "company_unit": [], "manager": []}
-        with self.assertRaisesRegex(ValueError, "source_id collision"):
-            validate_target_for_migration(Target(), records)
+        result = load_staging_batch(Target(), {
+            "administrator": [], "company": [], "company_unit": [], "manager": [],
+        })
+        self.assertEqual(result, (17, "FAILED", 1, 0, 1))
+        self.assertIn("CALL staging.pr_sync_legacy", executed[1][0])
+        self.assertIn("SET source_payload = NULL", executed[2][0])
+        self.assertEqual(executed[2][1], (17,))
 
+    def test_empty_snapshot_fails_check_and_normal_run_before_staging(self):
+        class Connections:
+            def __enter__(self):
+                return SimpleNamespace(source=object(), target=object())
 
-class AuditTests(unittest.TestCase):
+            def __exit__(self, *_):
+                pass
+
+        with patch.dict("os.environ", {
+            "LEGACY_DATABASE_URL": "legacy", "TARGET_DATABASE_URL": "target"
+        }), patch("app.main.load_dotenv"), patch(
+            "app.main.DatabaseConnections", return_value=Connections()
+        ), patch(
+            "app.main.extract_legacy_snapshot",
+            side_effect=ValueError("legacy snapshot has no records in the migration contract"),
+        ), patch("app.main.load_staging_batch") as load, patch(
+            "app.main.record_failed_batch", return_value=42
+        ) as record, redirect_stderr(StringIO()):
+            self.assertEqual(main(["--check"]), 1)
+            record.assert_not_called()
+            self.assertEqual(main([]), 1)
+            record.assert_called_once()
+            load.assert_not_called()
+
     def test_validation_failure_creates_failed_batch_without_source_payload(self):
         executed = []
 
