@@ -154,6 +154,11 @@ def load_staging_batch(target, records):
             cursor.executemany(query, [(batch_id, *(row[column] for column in columns)) for row in records[table]])
         cursor.execute("CALL staging.pr_sync_legacy(%s)", (batch_id,))
         cursor.execute(
+            "UPDATE staging.rpa_load_error SET source_payload = NULL "
+            "WHERE load_batch_id = %s AND source_payload IS NOT NULL",
+            (batch_id,),
+        )
+        cursor.execute(
             "SELECT status, total_records, processed_records, failed_records "
             "FROM staging.rpa_load_batch WHERE id = %s", (batch_id,)
         )

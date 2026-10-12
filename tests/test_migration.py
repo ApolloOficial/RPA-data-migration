@@ -8,6 +8,7 @@ from app.database import DatabaseConnections
 from app.main import main
 from app.migration import (
     extract_legacy_snapshot,
+    load_staging_batch,
     normalize_legacy_row,
     record_failed_batch,
     validate_target_for_migration,
@@ -125,6 +126,37 @@ class PreflightTests(unittest.TestCase):
 
 
 class AuditTests(unittest.TestCase):
+    def test_load_clears_error_payload_before_returning_batch(self):
+        executed = []
+
+        class Cursor:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_):
+                pass
+
+            def execute(self, query, params=None):
+                executed.append((query, params))
+
+            def executemany(self, *_):
+                pass
+
+            def fetchone(self):
+                return (17,) if len(executed) == 1 else ("FAILED", 1, 0, 1)
+
+        class Target:
+            def cursor(self):
+                return Cursor()
+
+        result = load_staging_batch(Target(), {
+            "administrator": [], "company": [], "company_unit": [], "manager": [],
+        })
+        self.assertEqual(result, (17, "FAILED", 1, 0, 1))
+        self.assertIn("CALL staging.pr_sync_legacy", executed[1][0])
+        self.assertIn("SET source_payload = NULL", executed[2][0])
+        self.assertEqual(executed[2][1], (17,))
+
     def test_empty_snapshot_fails_check_and_normal_run_before_staging(self):
         class Connections:
             def __enter__(self):
