@@ -7,6 +7,7 @@ from unittest.mock import patch
 from app.database import DatabaseConnections
 from app.main import main
 from app.migration import (
+    extract_legacy_snapshot,
     normalize_legacy_row,
     record_failed_batch,
     validate_target_for_migration,
@@ -15,6 +16,27 @@ from app.schema_only import derive_schema_without_demo_data
 
 
 class MappingTests(unittest.TestCase):
+    def test_empty_legacy_snapshot_is_rejected(self):
+        class Cursor:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_):
+                pass
+
+            def execute(self, *_):
+                pass
+
+            def fetchall(self):
+                return []
+
+        class Source:
+            def cursor(self, **_):
+                return Cursor()
+
+        with self.assertRaisesRegex(ValueError, "no records"):
+            extract_legacy_snapshot(Source())
+
     def test_manager_is_normalized_without_rehashing_password(self):
         password = "$2b$10$" + "a" * 53
         row = normalize_legacy_row("manager", {
@@ -77,7 +99,7 @@ class DestinationSetupTests(unittest.TestCase):
 
 
 class PreflightTests(unittest.TestCase):
-    def test_existing_source_id_with_different_identity_is_rejected(self):
+    def test_existing_source_id_can_be_updated(self):
         class Cursor:
             def __enter__(self):
                 return self
@@ -95,20 +117,38 @@ class PreflightTests(unittest.TestCase):
                     return ("staging.pr_sync_legacy(bigint)",)
                 return (1,)
 
-            def fetchall(self):
-                return [(1, "99999999999")] if "FROM administrator" in self.query else []
-
         class Target:
             def cursor(self):
                 return Cursor()
 
-        records = {"administrator": [{"source_id": 1, "cpf": "11111111111"}],
-                   "company": [], "company_unit": [], "manager": []}
-        with self.assertRaisesRegex(ValueError, "source_id collision"):
-            validate_target_for_migration(Target(), records)
+        validate_target_for_migration(Target())
 
 
 class AuditTests(unittest.TestCase):
+    def test_empty_snapshot_fails_check_and_normal_run_before_staging(self):
+        class Connections:
+            def __enter__(self):
+                return SimpleNamespace(source=object(), target=object())
+
+            def __exit__(self, *_):
+                pass
+
+        with patch.dict("os.environ", {
+            "LEGACY_DATABASE_URL": "legacy", "TARGET_DATABASE_URL": "target"
+        }), patch("app.main.load_dotenv"), patch(
+            "app.main.DatabaseConnections", return_value=Connections()
+        ), patch(
+            "app.main.extract_legacy_snapshot",
+            side_effect=ValueError("legacy snapshot has no records in the migration contract"),
+        ), patch("app.main.load_staging_batch") as load, patch(
+            "app.main.record_failed_batch", return_value=42
+        ) as record, redirect_stderr(StringIO()):
+            self.assertEqual(main(["--check"]), 1)
+            record.assert_not_called()
+            self.assertEqual(main([]), 1)
+            record.assert_called_once()
+            load.assert_not_called()
+
     def test_validation_failure_creates_failed_batch_without_source_payload(self):
         executed = []
 

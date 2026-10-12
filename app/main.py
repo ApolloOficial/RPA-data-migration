@@ -30,7 +30,7 @@ def main(argv=None):
         with DatabaseConnections(legacy_dsn, target_dsn) as databases:
             try:
                 records, user_types, outside_contract = extract_legacy_snapshot(databases.source)
-                validate_target_for_migration(databases.target, records)
+                validate_target_for_migration(databases.target)
             except ValueError as exc:
                 print(f"Migration stopped: {exc}", file=sys.stderr)
                 if not args.check:

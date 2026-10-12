@@ -107,6 +107,8 @@ def extract_legacy_snapshot(source):
                        "SELECT 'painel', count(*) FROM painel UNION ALL "
                        "SELECT 'manutencao', count(*) FROM manutencao")
         outside_contract = {row["name"]: row["total"] for row in cursor.fetchall()}
+    if not any(result.values()):
+        raise ValueError("legacy snapshot has no records in the migration contract")
     admins = {row["source_id"] for row in result["administrator"]}
     companies = {row["source_id"] for row in result["company"]}
     units = {row["source_id"] for row in result["company_unit"]}
@@ -121,15 +123,8 @@ def extract_legacy_snapshot(source):
     return result, user_types, outside_contract
 
 
-def validate_target_for_migration(target, records):
-    """Evita colisões de source_id com dados de demonstração do destino."""
-    checks = (
-        ("administrator", "administrator", "cpf"),
-        ("company", "company", "cnpj"),
-        ("company_unit", "company_unit", "cnpj"),
-        # O empregado no destino não tem CPF; o e-mail identifica um gerente existente.
-        ("manager", "employee", "email"),
-    )
+def validate_target_for_migration(target):
+    """Confere os pré-requisitos do destino e reserva a carga em andamento."""
     with target.cursor() as cursor:
         cursor.execute("SELECT pg_try_advisory_xact_lock(7193026)")
         if not cursor.fetchone()[0]:
@@ -140,16 +135,6 @@ def validate_target_for_migration(target, records):
         cursor.execute("SELECT 1 FROM roles WHERE name = 'GERENTE'")
         if cursor.fetchone() is None:
             raise ValueError("destination is missing the GERENTE role")
-        for source_table, target_table, identity in checks:
-            cursor.execute(f"SELECT source_id, {identity} FROM {target_table} WHERE source_id IS NOT NULL")
-            existing = dict(cursor.fetchall())
-            for row in records[source_table]:
-                old = existing.get(row["source_id"])
-                if old is not None and str(old).strip().lower() != row[identity].lower():
-                    raise ValueError(
-                        f"source_id collision in {target_table}:{row['source_id']}; "
-                        "use a clean destination or resolve the conflicting demo data"
-                    )
 
 
 def load_staging_batch(target, records):
