@@ -100,7 +100,9 @@ class DestinationSetupTests(unittest.TestCase):
 
 
 class PreflightTests(unittest.TestCase):
-    def test_existing_source_id_can_be_updated(self):
+    def test_preflight_checks_destination_prerequisites_without_identity_lookup(self):
+        queries = []
+
         class Cursor:
             def __enter__(self):
                 return self
@@ -110,6 +112,7 @@ class PreflightTests(unittest.TestCase):
 
             def execute(self, query):
                 self.query = query
+                queries.append(query)
 
             def fetchone(self):
                 if "pg_try_advisory" in self.query:
@@ -123,6 +126,8 @@ class PreflightTests(unittest.TestCase):
                 return Cursor()
 
         validate_target_for_migration(Target())
+        self.assertEqual(len(queries), 3)
+        self.assertFalse(any("source_id" in query for query in queries))
 
 
 class AuditTests(unittest.TestCase):
