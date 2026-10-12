@@ -15,7 +15,7 @@ O RPA transfere cadastros do PostgreSQL legado do 1º ano para o banco normaliza
 ## Como funciona
 
 - **Origem:** uma conexão somente leitura obtém uma visão consistente do legado.
-- **Tratamento:** o robô reúne tabelas, normaliza campos e valida referências e colisões de identidade.
+- **Tratamento:** o robô reúne tabelas, normaliza campos e valida referências.
 - **Destino:** o RPA registra o lote em `staging` e chama `staging.pr_sync_legacy(id_do_lote)`; a procedure distribui os registros pelas tabelas finais.
 - **Auditoria:** lote e erros ficam em `staging.rpa_load_batch` e `staging.rpa_load_error`. A carga é transacional e pode ser reexecutada.
 
@@ -59,7 +59,7 @@ python -m app --check
 python -m app
 ```
 
-**Os scripts de criação e dataload reiniciam o banco:** execute-os apenas na preparação de um ambiente novo ou descartável. O `--check` valida relações e colisões de identidade sem gravar. Na execução, a origem usa transação somente leitura; o destino confirma ou desfaz a carga como uma transação. Uma validação inválida gera lote `FAILED` e erro sem dados pessoais. Código de saída `0` indica lote concluído, `2` indica registros rejeitados pela procedure e `1` indica falha antes da carga. Consulte `staging.rpa_load_batch` e `staging.rpa_load_error` e reexecute após corrigir a origem ou a colisão.
+**Os scripts de criação e dataload reiniciam o banco:** execute-os apenas na preparação de um ambiente novo ou descartável. O `--check` valida relações e rejeita uma origem sem cadastros no contrato, sem gravar. Na execução, a origem usa transação somente leitura; o destino confirma ou desfaz a carga como uma transação. Uma validação inválida gera lote `FAILED` e erro sem cópia do registro. Código de saída `0` indica lote concluído, `2` indica registros rejeitados pela procedure e `1` indica falha antes da carga. Consulte `staging.rpa_load_batch` e `staging.rpa_load_error` e reexecute após corrigir a origem ou a restrição apontada. O mesmo `source_id` atualiza o cadastro já migrado.
 
 ## Testes
 
