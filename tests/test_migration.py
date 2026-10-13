@@ -44,7 +44,7 @@ class MappingTests(unittest.TestCase):
             "source_id": 7, "full_name": "Ana", "email": " ANA@EXAMPLE.ORG ",
             "cpf": "123.456.789-01", "password_hash": password,
             "company_unit_source_id": 3, "registered_by_source_id": 1,
-            "status": "INATIVO",
+            "status": "Inativo",
         })
         self.assertEqual(row["email"], "ana@example.org")
         self.assertEqual(row["cpf"], "12345678901")
@@ -60,7 +60,7 @@ class MappingTests(unittest.TestCase):
             "street_name": "Rua A", "number": "4", "additional_info": None,
             "neighborhood": "Centro", "city": "São Paulo", "state": "sp",
             "zip_code": "01234-567", "registered_by_source_id": 1,
-            "status": "CANCELADO",
+            "status": "Cancelado",
         })
         self.assertEqual((row["cnpj"], row["zip_code"], row["state"]),
                          ("11222333000144", "01234567", "SP"))
@@ -71,7 +71,7 @@ class MappingTests(unittest.TestCase):
             "source_id": 7, "full_name": "Ana", "email": "ana@example.org",
             "cpf": "12345678901", "password_hash": "senha123",
             "company_unit_source_id": 3, "registered_by_source_id": 1,
-            "status": "ATIVO",
+            "status": "Ativo",
         })
         self.assertEqual(row["password_hash"], "senha123")
 

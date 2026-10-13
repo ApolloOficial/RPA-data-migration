@@ -70,7 +70,7 @@ def normalize_legacy_row(table, row):
     """Converte nomes, status e documentos para os campos de staging."""
     source_id = row["source_id"]
     item = dict(row)
-    status = item.pop("status")
+    status = str(item.pop("status")).strip().upper()
     if status not in ("ATIVO", "INATIVO", "CANCELADO"):
         raise ValueError(f"{table}:{source_id} has unsupported status")
     item["is_active"] = status == "ATIVO"
