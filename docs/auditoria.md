@@ -6,6 +6,7 @@ O fluxo é `legado → app → staging → staging.pr_sync_legacy → tabelas no
 
 - O robô lê administradores, empresas, filiais e gerentes em uma transação `REPEATABLE READ READ ONLY`. Ele valida documentos, e-mails, status e referências antes de abrir o lote.
 - A procedure do banco final separa os dados da filial em `segment`, `address` e `company_unit`. `source_id` preserva a identidade do legado para reexecução sem duplicar entidades.
+- O legado usa valores como `Ativo`, `Administrador` e `Gerente`; o robô compara status e tipos sem depender de maiúsculas. A coluna `employee.is_first_access` recebe `true` do banco para novos funcionários e permanece inalterada na sincronização seguinte.
 - Os cadastros demonstrativos do SQL final usam `source_id` negativos, reservando IDs positivos para o legado. Reexecuções atualizam o mesmo `source_id`, inclusive quando CPF, CNPJ ou e-mail mudam. Conflitos com outras entidades ficam sujeitos às restrições únicas do banco e aparecem como falhas por registro. O utilitário `app.schema_only` permanece disponível para testes de esquema vazio, mas não é necessário no fluxo de entrega.
 - O contrato da procedure não recebe `contrato`, `inversor`, `string`, `painel` nem `manutencao`. O esquema final não possui tabela de contrato; equipamentos e manutenções requerem atributos e papéis operacionais que o legado não fornece. O robô mostra essas contagens e não fabrica dados para preencher lacunas.
 

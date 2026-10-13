@@ -32,7 +32,9 @@ Legado → extração e tratamento → staging → pr_sync_legacy → tabelas no
 | `filial` + `segmento` + `endereco` | `legacy_company_unit` | `company_unit` + `segment` + `address` | O robô une as três tabelas; a procedure separa unidade, segmento e endereço, resolvendo as chaves da empresa e do administrador. CEP perde pontuação e UF vai para maiúsculas. |
 | `usuario` com tipo `GERENTE` | `legacy_user` | `employee` com papel `GERENTE` | `id_filial` liga o gerente à unidade; e-mail vai para minúsculas e o hash da senha é preservado. |
 
-`ATIVO` vira `true`; `INATIVO` e `CANCELADO` viram `false`. O destino gera seus próprios IDs e guarda o ID legado em `source_id`, usado pela procedure para atualizar registros em reexecuções. Um hash que não atenda ao formato esperado pelo destino é rejeitado por registro e aparece em `staging.rpa_load_error`.
+`Ativo` vira `true`; `Inativo` e `Cancelado` viram `false`, independentemente das maiúsculas. O destino gera seus próprios IDs e guarda o ID legado em `source_id`, usado pela procedure para atualizar registros em reexecuções. Um hash que não atenda ao formato esperado pelo destino é rejeitado por registro e aparece em `staging.rpa_load_error`.
+
+Novos registros de `employee` começam com `is_first_access = true` pelo padrão do banco. O RPA não redefine essa flag em reexecuções; a aplicação deve marcá-la como `false` após concluir o primeiro acesso. O SQL demonstrativo inclui seis administradores da equipe com CPFs sintéticos, distintos dos cadastros reais do legado.
 
 O contrato atual da procedure não recebe `contrato`, `inversor`, `string`, `painel` nem `manutencao`. O robô informa suas contagens, mas não inventa os campos e papéis operacionais necessários para inseri-los no banco novo; veja a [decisão de escopo](docs/auditoria.md).
 
