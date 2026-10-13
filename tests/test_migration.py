@@ -17,6 +17,33 @@ from app.schema_only import derive_schema_without_demo_data
 
 
 class MappingTests(unittest.TestCase):
+    def test_mixed_case_legacy_role_is_included(self):
+        class Cursor:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_):
+                pass
+
+            def execute(self, query):
+                self.query = query
+
+            def fetchall(self):
+                if "WHERE upper(btrim(t.nome)) = 'ADMINISTRADOR'" in self.query:
+                    return [{"source_id": 1, "full_name": "Ana", "email": "ana@example.org",
+                             "cpf": "12345678901", "status": "Ativo"}]
+                if "GROUP BY t.nome" in self.query:
+                    return [{"nome": "Administrador", "total": 1}]
+                return []
+
+        class Source:
+            def cursor(self, **_):
+                return Cursor()
+
+        records, user_types, _ = extract_legacy_snapshot(Source())
+        self.assertEqual(len(records["administrator"]), 1)
+        self.assertEqual(user_types, {"ADMINISTRADOR": 1})
+
     def test_empty_legacy_snapshot_is_rejected(self):
         class Cursor:
             def __enter__(self):

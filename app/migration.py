@@ -8,7 +8,7 @@ SOURCE_QUERIES = {
         SELECT u.id AS source_id, u.nome AS full_name, u.email, u.cpf,
                u.ativo AS status
         FROM usuario u JOIN tipo_usuario t ON t.id = u.id_tipo_usuario
-        WHERE t.nome = 'ADMINISTRADOR' ORDER BY u.id
+        WHERE upper(btrim(t.nome)) = 'ADMINISTRADOR' ORDER BY u.id
     """,
     "company": """
         SELECT e.id AS source_id, e.nome AS name, e.cnpj,
@@ -33,7 +33,7 @@ SOURCE_QUERIES = {
                u.id_usuario_cadastro AS registered_by_source_id,
                u.ativo AS status
         FROM usuario u JOIN tipo_usuario t ON t.id = u.id_tipo_usuario
-        WHERE t.nome = 'GERENTE' ORDER BY u.id
+        WHERE upper(btrim(t.nome)) = 'GERENTE' ORDER BY u.id
     """,
 }
 
@@ -100,7 +100,7 @@ def extract_legacy_snapshot(source):
             cursor.execute(query)
             result[table] = [normalize_legacy_row(table, row) for row in cursor.fetchall()]
         cursor.execute("SELECT t.nome, count(*) AS total FROM usuario u JOIN tipo_usuario t ON t.id = u.id_tipo_usuario GROUP BY t.nome")
-        user_types = {row["nome"]: row["total"] for row in cursor.fetchall()}
+        user_types = {row["nome"].strip().upper(): row["total"] for row in cursor.fetchall()}
         cursor.execute("SELECT 'contrato' AS name, count(*) AS total FROM contrato UNION ALL "
                        "SELECT 'inversor', count(*) FROM inversor UNION ALL "
                        "SELECT 'string', count(*) FROM string UNION ALL "
