@@ -17,6 +17,33 @@ from app.schema_only import derive_schema_without_demo_data
 
 
 class MappingTests(unittest.TestCase):
+    def test_mixed_case_legacy_role_is_included(self):
+        class Cursor:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_):
+                pass
+
+            def execute(self, query):
+                self.query = query
+
+            def fetchall(self):
+                if "WHERE upper(btrim(t.nome)) = 'ADMINISTRADOR'" in self.query:
+                    return [{"source_id": 1, "full_name": "Ana", "email": "ana@example.org",
+                             "cpf": "12345678901", "status": "Ativo"}]
+                if "GROUP BY t.nome" in self.query:
+                    return [{"nome": "Administrador", "total": 1}]
+                return []
+
+        class Source:
+            def cursor(self, **_):
+                return Cursor()
+
+        records, user_types, _ = extract_legacy_snapshot(Source())
+        self.assertEqual(len(records["administrator"]), 1)
+        self.assertEqual(user_types, {"ADMINISTRADOR": 1})
+
     def test_empty_legacy_snapshot_is_rejected(self):
         class Cursor:
             def __enter__(self):
@@ -44,7 +71,7 @@ class MappingTests(unittest.TestCase):
             "source_id": 7, "full_name": "Ana", "email": " ANA@EXAMPLE.ORG ",
             "cpf": "123.456.789-01", "password_hash": password,
             "company_unit_source_id": 3, "registered_by_source_id": 1,
-            "status": "INATIVO",
+            "status": "Inativo",
         })
         self.assertEqual(row["email"], "ana@example.org")
         self.assertEqual(row["cpf"], "12345678901")
@@ -60,7 +87,7 @@ class MappingTests(unittest.TestCase):
             "street_name": "Rua A", "number": "4", "additional_info": None,
             "neighborhood": "Centro", "city": "São Paulo", "state": "sp",
             "zip_code": "01234-567", "registered_by_source_id": 1,
-            "status": "CANCELADO",
+            "status": "Cancelado",
         })
         self.assertEqual((row["cnpj"], row["zip_code"], row["state"]),
                          ("11222333000144", "01234567", "SP"))
@@ -71,7 +98,7 @@ class MappingTests(unittest.TestCase):
             "source_id": 7, "full_name": "Ana", "email": "ana@example.org",
             "cpf": "12345678901", "password_hash": "senha123",
             "company_unit_source_id": 3, "registered_by_source_id": 1,
-            "status": "ATIVO",
+            "status": "Ativo",
         })
         self.assertEqual(row["password_hash"], "senha123")
 
