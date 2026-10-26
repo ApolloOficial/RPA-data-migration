@@ -33,7 +33,10 @@ class MappingTests(unittest.TestCase):
                     return [{"source_id": 1, "full_name": "Ana", "email": "ana@example.org",
                              "cpf": "12345678901", "status": "Ativo"}]
                 if "GROUP BY t.nome" in self.query:
-                    return [{"nome": "Administrador", "total": 1}]
+                    return [
+                        {"nome": "Administrador", "total": 1},
+                        {"nome": " ADMINISTRADOR ", "total": 2},
+                    ]
                 return []
 
         class Source:
@@ -42,7 +45,7 @@ class MappingTests(unittest.TestCase):
 
         records, user_types, _ = extract_legacy_snapshot(Source())
         self.assertEqual(len(records["administrator"]), 1)
-        self.assertEqual(user_types, {"ADMINISTRADOR": 1})
+        self.assertEqual(user_types, {"ADMINISTRADOR": 3})
 
     def test_empty_legacy_snapshot_is_rejected(self):
         class Cursor:

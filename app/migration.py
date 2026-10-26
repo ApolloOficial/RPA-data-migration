@@ -100,7 +100,10 @@ def extract_legacy_snapshot(source):
             cursor.execute(query)
             result[table] = [normalize_legacy_row(table, row) for row in cursor.fetchall()]
         cursor.execute("SELECT t.nome, count(*) AS total FROM usuario u JOIN tipo_usuario t ON t.id = u.id_tipo_usuario GROUP BY t.nome")
-        user_types = {row["nome"].strip().upper(): row["total"] for row in cursor.fetchall()}
+        user_types = {}
+        for row in cursor.fetchall():
+            user_type = row["nome"].strip().upper()
+            user_types[user_type] = user_types.get(user_type, 0) + row["total"]
         cursor.execute("SELECT 'contrato' AS name, count(*) AS total FROM contrato UNION ALL "
                        "SELECT 'inversor', count(*) FROM inversor UNION ALL "
                        "SELECT 'string', count(*) FROM string UNION ALL "
