@@ -56,10 +56,12 @@ Antes da primeira carga, prepare bancos novos e isolados com os scripts da entre
 ```powershell
 psql -X -v ON_ERROR_STOP=1 -d "postgresql://usuario@host/banco_legado" -f "C:\caminho\script-primeiro-ano.sql"
 psql -X -v ON_ERROR_STOP=1 -d "postgresql://usuario@host/banco_novo" -f "C:\caminho\Script_SQL_Apollo_2ano.sql"
-psql -X -v ON_ERROR_STOP=1 -d "postgresql://usuario@host/banco_novo" -f "C:\caminho\Dataload_Apollo_2ano.sql"
+psql -X -v ON_ERROR_STOP=1 -d "postgresql://usuario@host/banco_novo" -f "C:\caminho\Dataload_Apollo_Formal_500_Registros.sql"
 python -m app --check
 python -m app
 ```
+
+Para avaliar dados legados inválidos, em um banco descartável após a carga formal, execute opcionalmente `Dataload_Apollo_Sujo_160_Registros.sql`. O arquivo gera 220 linhas de staging (160 usuários, 25 empresas e 35 filiais) e não chama a procedure de sincronização. Os dados sujos não chegam às views `dm` sem uma etapa de processamento.
 
 **Os scripts de criação e dataload reiniciam o banco:** execute-os apenas na preparação de um ambiente novo ou descartável. O `--check` valida relações e rejeita uma origem sem cadastros no contrato, sem gravar. Na execução, a origem usa transação somente leitura; o destino confirma ou desfaz a carga como uma transação. Uma validação inválida gera lote `FAILED` e erro sem cópia do registro. Código de saída `0` indica lote concluído, `2` indica registros rejeitados pela procedure e `1` indica falha antes da carga. Consulte `staging.rpa_load_batch` e `staging.rpa_load_error` e reexecute após corrigir a origem ou a restrição apontada. O mesmo `source_id` atualiza o cadastro já migrado.
 
