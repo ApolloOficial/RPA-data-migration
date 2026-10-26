@@ -5,7 +5,6 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/ApolloOficial/RPA-data-migration/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/ApolloOficial/RPA-data-migration/actions/workflows/ci.yml/badge.svg"></a>
   <img alt="Python 3.12+" src="https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white">
   <img alt="PostgreSQL" src="https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white">
 </p>
@@ -61,7 +60,7 @@ python -m app --check
 python -m app
 ```
 
-Para avaliar dados legados inválidos, em um banco descartável após a carga formal, execute opcionalmente `Dataload_Apollo_Sujo_160_Registros.sql`. O arquivo gera 220 linhas de staging (160 usuários, 25 empresas e 35 filiais) e não chama a procedure de sincronização. Os dados sujos não chegam às views `dm` sem uma etapa de processamento.
+`Dataload_Apollo_Sujo_160_Registros.sql` é uma massa separada para analisar dados inválidos no staging: gera 220 linhas (160 usuários, 25 empresas e 35 filiais) e não chama a procedure. Ela não exercita a extração ou a validação do RPA. Para testar falhas do RPA, use um banco legado descartável com registros inválidos e execute `python -m app` contra um destino de teste.
 
 **O script de construção recria o schema e a carga formal reinicia as tabelas de domínio:** execute-os apenas na preparação de um ambiente novo ou descartável. A carga suja apenas acrescenta registros a staging e não executa a sincronização. O `--check` valida relações e rejeita uma origem sem cadastros no contrato, sem gravar. Na execução, a origem usa transação somente leitura; o destino confirma ou desfaz a carga como uma transação. Uma validação inválida gera lote `FAILED` e erro sem cópia do registro. Código de saída `0` indica lote concluído, `2` indica registros rejeitados pela procedure e `1` indica falha antes da carga. Consulte `staging.rpa_load_batch` e `staging.rpa_load_error` e reexecute após corrigir a origem ou a restrição apontada. O mesmo `source_id` atualiza o cadastro já migrado.
 
@@ -70,8 +69,6 @@ Para avaliar dados legados inválidos, em um banco descartável após a carga fo
 ```powershell
 python -m unittest discover -s tests -v
 ```
-
-O CI executa os testes e verifica a sintaxe em branches `feat/**` e PRs para `main`.
 
 ## Documentação
 

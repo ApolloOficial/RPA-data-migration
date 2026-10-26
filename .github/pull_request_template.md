@@ -16,7 +16,7 @@
 - ⬜ Mapeamento e tratamento de campos
 - ⬜ Staging e procedure do banco normalizado
 - ⬜ Conexões e transações
-- ⬜ Documentação ou CI
+- ⬜ Documentação
 
 **Tabelas de origem e destino:**
 
