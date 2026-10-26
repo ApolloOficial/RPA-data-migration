@@ -23,21 +23,6 @@ O RPA transfere cadastros do PostgreSQL legado do 1º ano para o banco normaliza
 Legado → extração e tratamento → staging → pr_sync_legacy → tabelas normalizadas
 ```
 
-## Mapeamento
-
-| Origem legada | Entrada em `staging` | Destino normalizado | Mapeamento e tratamento |
-| --- | --- | --- | --- |
-| `usuario` com tipo `ADMINISTRADOR` | `legacy_user` | `administrator` | `id` vira `source_id`; CPF perde pontuação, e-mail vai para minúsculas e `ativo` vira booleano. |
-| `empresa` | `legacy_company` | `company` | CNPJ perde pontuação; `id_usuario_cadastro` referencia o administrador legado. |
-| `filial` + `segmento` + `endereco` | `legacy_company_unit` | `company_unit` + `segment` + `address` | O robô une as três tabelas; a procedure separa unidade, segmento e endereço, resolvendo as chaves da empresa e do administrador. CEP perde pontuação e UF vai para maiúsculas. |
-| `usuario` com tipo `GERENTE` | `legacy_user` | `employee` com papel `GERENTE` | `id_filial` liga o gerente à unidade; e-mail vai para minúsculas e o hash da senha é preservado. |
-
-`Ativo` vira `true`; `Inativo` e `Cancelado` viram `false`, independentemente das maiúsculas. O destino gera seus próprios IDs e guarda o ID legado em `source_id`, usado pela procedure para atualizar registros em reexecuções. Um hash que não atenda ao formato esperado pelo destino é rejeitado por registro e aparece em `staging.rpa_load_error`.
-
-Novos registros de `employee` começam com `is_first_access = true` pelo padrão do banco. O RPA não redefine essa flag em reexecuções; a aplicação deve marcá-la como `false` após concluir o primeiro acesso. O SQL demonstrativo inclui seis administradores da equipe com CPFs sintéticos, distintos dos cadastros reais do legado.
-
-O contrato atual da procedure não recebe `contrato`, `inversor`, `string`, `painel` nem `manutencao`. O robô informa suas contagens, mas não inventa os campos e papéis operacionais necessários para inseri-los no banco novo; veja a [decisão de escopo](docs/auditoria.md).
-
 ## Início rápido
 
 Requer Python 3.12+, `psql` e acesso aos dois bancos PostgreSQL.
@@ -63,6 +48,21 @@ python -m app
 
 **Os scripts de criação e dataload reiniciam o banco:** execute-os apenas na preparação de um ambiente novo ou descartável. O `--check` valida relações e rejeita uma origem sem cadastros no contrato, sem gravar. Na execução, a origem usa transação somente leitura; o destino confirma ou desfaz a carga como uma transação. Uma validação inválida gera lote `FAILED` e erro sem cópia do registro. Código de saída `0` indica lote concluído, `2` indica registros rejeitados pela procedure e `1` indica falha antes da carga. Consulte `staging.rpa_load_batch` e `staging.rpa_load_error` e reexecute após corrigir a origem ou a restrição apontada. O mesmo `source_id` atualiza o cadastro já migrado.
 
+## Mapeamento
+
+| Origem legada | Entrada em `staging` | Destino normalizado | Mapeamento e tratamento |
+| --- | --- | --- | --- |
+| `usuario` com tipo `ADMINISTRADOR` | `legacy_user` | `administrator` | `id` vira `source_id`; CPF perde pontuação, e-mail vai para minúsculas e `ativo` vira booleano. |
+| `empresa` | `legacy_company` | `company` | CNPJ perde pontuação; `id_usuario_cadastro` referencia o administrador legado. |
+| `filial` + `segmento` + `endereco` | `legacy_company_unit` | `company_unit` + `segment` + `address` | O robô une as três tabelas; a procedure separa unidade, segmento e endereço, resolvendo as chaves da empresa e do administrador. CEP perde pontuação e UF vai para maiúsculas. |
+| `usuario` com tipo `GERENTE` | `legacy_user` | `employee` com papel `GERENTE` | `id_filial` liga o gerente à unidade; e-mail vai para minúsculas e o hash da senha é preservado. |
+
+`Ativo` vira `true`; `Inativo` e `Cancelado` viram `false`, independentemente das maiúsculas. O destino gera seus próprios IDs e guarda o ID legado em `source_id`, usado pela procedure para atualizar registros em reexecuções. Um hash que não atenda ao formato esperado pelo destino é rejeitado por registro e aparece em `staging.rpa_load_error`.
+
+Novos registros de `employee` começam com `is_first_access = true` pelo padrão do banco. O RPA não redefine essa flag em reexecuções; a aplicação deve marcá-la como `false` após concluir o primeiro acesso. O SQL demonstrativo inclui seis administradores da equipe com CPFs sintéticos, distintos dos cadastros reais do legado.
+
+O contrato atual da procedure não recebe `contrato`, `inversor`, `string`, `painel` nem `manutencao`. O robô informa suas contagens, mas não inventa os campos e papéis operacionais necessários para inseri-los no banco novo; veja a [decisão de escopo](docs/auditoria.md).
+
 ## Testes
 
 ```powershell
@@ -74,3 +74,4 @@ O CI executa os testes e verifica a sintaxe em branches `feat/**` e PRs para `ma
 ## Documentação
 
 Veja as [decisões de mapeamento, evidências e limites da carga](docs/auditoria.md). O robô pode rodar sob demanda ou agendado em um ambiente com acesso aos dois bancos; não exige um serviço permanente próprio na cloud.
+
