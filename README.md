@@ -35,7 +35,7 @@ Legado → extração e tratamento → staging → pr_sync_legacy → tabelas no
 
 Novos registros de `employee` começam com `is_first_access = true` pelo padrão do banco. O RPA não redefine essa flag em reexecuções; a aplicação deve marcá-la como `false` após concluir o primeiro acesso. O SQL demonstrativo inclui seis administradores da equipe com CPFs sintéticos, distintos dos cadastros reais do legado.
 
-O contrato atual da procedure não recebe `contrato`, `inversor`, `string`, `painel` nem `manutencao`. O robô informa suas contagens, mas não inventa os campos e papéis operacionais necessários para inseri-los no banco novo; veja a [decisão de escopo](docs/auditoria.md).
+O contrato atual da procedure não recebe `contrato`, `inversor`, `string`, `painel` nem `manutencao`. Quando a origem passa pela validação, o robô informa as contagens dessas tabelas, mas não inventa os campos e papéis operacionais necessários para inseri-las no banco novo; veja a [decisão de escopo](docs/auditoria.md).
 
 ## Início rápido
 
@@ -49,6 +49,8 @@ Copy-Item .env.example .env
 ```
 
 Preencha **`.env` na raiz do repositório** com as URIs reais `LEGACY_DATABASE_URL` e `TARGET_DATABASE_URL`. O arquivo é ignorado pelo Git. Use uma conta somente leitura no legado; a conta de destino precisa executar a procedure e gravar nas tabelas que ela atualiza. Para servidores remotos, inclua `?sslmode=require` na URI quando exigido pelo provedor.
+
+Antes da migração, o legado precisa ter ao menos um usuário `ADMINISTRADOR`, e as empresas, filiais e gerentes precisam referenciar um administrador existente. `--check` valida essa condição sem gravar; se ela falhar, a execução normal também não deve ser iniciada. A [auditoria](docs/auditoria.md) registra o resultado da última verificação do ambiente configurado.
 
 Antes da primeira carga, prepare bancos novos e isolados com os scripts da entrega de Modelagem de Dados. O SQL final reserva `source_id` negativos para os cadastros demonstrativos; os IDs positivos ficam disponíveis para o legado. Execute o dataload **antes** do RPA: ele reinicia tabelas e apagaria uma migração anterior.
 
