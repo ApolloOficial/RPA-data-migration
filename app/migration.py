@@ -52,6 +52,43 @@ STAGING_COLUMNS = {
     ),
 }
 
+TARGET_REQUIRED_COLUMNS = {
+    "roles": ("name",),
+    "administrator": ("id", "full_name", "email", "cpf", "is_active", "source_id", "synced_at"),
+    "company": (
+        "id", "name", "cnpj", "contact_email", "description", "is_active", "registered_by",
+        "source_id", "synced_at",
+    ),
+    "segment": ("id", "name", "source_id", "synced_at"),
+    "address": ("id", "street_name", "number", "additional_info", "neighborhood", "city", "state", "zip_code"),
+    "company_unit": (
+        "id", "company_id", "segment_id", "address_id", "name", "cnpj", "email", "phone",
+        "registered_by", "is_active", "source_id", "synced_at", "responsible_employee_id",
+    ),
+    "employee": (
+        "id", "full_name", "email", "password_hash", "role_id", "company_unit_id",
+        "is_active", "is_first_access", "registered_by", "source_id", "synced_at",
+    ),
+    "staging.rpa_load_batch": (
+        "id", "source_system", "status", "total_records", "processed_records", "failed_records",
+    ),
+    "staging.legacy_user": (
+        "load_batch_id", "source_id", "user_type", "full_name", "email", "cpf", "password_hash",
+        "company_unit_source_id", "registered_by_source_id", "is_active", "processing_status",
+    ),
+    "staging.legacy_company": (
+        "load_batch_id", "source_id", "name", "cnpj", "contact_email", "description",
+        "is_active", "registered_by_source_id", "processing_status",
+    ),
+    "staging.legacy_company_unit": (
+        "load_batch_id", "source_id", "company_source_id", "segment_source_id", "segment_name",
+        "name", "cnpj", "email", "phone", "street_name", "number", "additional_info",
+        "neighborhood", "city", "state", "zip_code", "is_active", "registered_by_source_id",
+        "processing_status",
+    ),
+    "staging.rpa_load_error": ("load_batch_id", "source_record_key", "error_message", "source_payload"),
+}
+
 
 def normalize_digits(value, length, table, source_id, field):
     normalized = re.sub(r"[^0-9]", "", value or "")
@@ -128,7 +165,35 @@ def extract_legacy_snapshot(source):
 
 def validate_target_for_migration(target):
     """Confere os pré-requisitos do destino e reserva a carga em andamento."""
+    expected_columns = [
+        ("staging" if "." in table else "public", table.split(".")[-1], column)
+        for table, columns in TARGET_REQUIRED_COLUMNS.items()
+        for column in columns
+    ]
+    values = ", ".join(["(%s, %s, %s)"] * len(expected_columns))
     with target.cursor() as cursor:
+        cursor.execute(
+            "WITH expected(table_schema, table_name, column_name) AS (VALUES " + values + ") "
+            "SELECT e.table_schema || '.' || e.table_name || '.' || e.column_name "
+            "FROM expected e LEFT JOIN information_schema.columns c "
+            "ON c.table_schema = e.table_schema AND c.table_name = e.table_name "
+            "AND c.column_name = e.column_name WHERE c.column_name IS NULL "
+            "ORDER BY e.table_schema, e.table_name, e.column_name",
+            [value for row in expected_columns for value in row],
+        )
+        missing_columns = [row[0] for row in cursor.fetchall()]
+        if missing_columns:
+            raise ValueError(
+                "destination schema is incompatible; missing columns: " + ", ".join(missing_columns)
+            )
+        cursor.execute(
+            "SELECT COALESCE(column_default::boolean, false) "
+            "FROM information_schema.columns "
+            "WHERE table_schema = 'public' AND table_name = 'employee' "
+            "AND column_name = 'is_first_access'"
+        )
+        if not cursor.fetchone()[0]:
+            raise ValueError("destination schema requires employee.is_first_access DEFAULT true")
         cursor.execute("SELECT pg_try_advisory_xact_lock(7193026)")
         if not cursor.fetchone()[0]:
             raise ValueError("another migration is running against this destination")
