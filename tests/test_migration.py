@@ -127,7 +127,7 @@ class DestinationSetupTests(unittest.TestCase):
 
 
 class PreflightTests(unittest.TestCase):
-    def test_preflight_checks_destination_prerequisites_without_identity_lookup(self):
+    def test_preflight_checks_destination_schema_procedure_and_role(self):
         queries = []
 
         class Cursor:
@@ -137,24 +137,86 @@ class PreflightTests(unittest.TestCase):
             def __exit__(self, *_):
                 pass
 
-            def execute(self, query):
+            def execute(self, query, *_):
                 self.query = query
                 queries.append(query)
 
             def fetchone(self):
+                if "column_default" in self.query:
+                    return (True,)
                 if "pg_try_advisory" in self.query:
                     return (True,)
                 if "to_regprocedure" in self.query:
                     return ("staging.pr_sync_legacy(bigint)",)
                 return (1,)
 
+            def fetchall(self):
+                return []
+
         class Target:
             def cursor(self):
                 return Cursor()
 
         validate_target_for_migration(Target())
-        self.assertEqual(len(queries), 3)
-        self.assertFalse(any("source_id" in query for query in queries))
+        self.assertEqual(len(queries), 5)
+        self.assertTrue(any("information_schema.columns" in query for query in queries))
+        self.assertTrue(any("is_first_access" in query for query in queries))
+        self.assertTrue(any("to_regprocedure" in query for query in queries))
+
+    def test_preflight_stops_before_lock_when_target_column_is_missing(self):
+        queries = []
+
+        class Cursor:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_):
+                pass
+
+            def execute(self, query, *_):
+                self.query = query
+                queries.append(query)
+
+            def fetchall(self):
+                return [("public.employee.is_first_access",)]
+
+        class Target:
+            def cursor(self):
+                return Cursor()
+
+        with self.assertRaisesRegex(ValueError, "public.employee.is_first_access"):
+            validate_target_for_migration(Target())
+        self.assertEqual(len(queries), 1)
+        self.assertNotIn("pg_try_advisory_xact_lock", queries[0])
+
+    def test_preflight_rejects_first_access_default_other_than_true(self):
+        queries = []
+
+        class Cursor:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_):
+                pass
+
+            def execute(self, query, *_):
+                self.query = query
+                queries.append(query)
+
+            def fetchall(self):
+                return []
+
+            def fetchone(self):
+                return (False,)
+
+        class Target:
+            def cursor(self):
+                return Cursor()
+
+        with self.assertRaisesRegex(ValueError, "is_first_access DEFAULT true"):
+            validate_target_for_migration(Target())
+        self.assertEqual(len(queries), 2)
+        self.assertNotIn("pg_try_advisory_xact_lock", queries[-1])
 
 
 class AuditTests(unittest.TestCase):

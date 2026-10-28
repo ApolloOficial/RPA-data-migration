@@ -5,7 +5,6 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/ApolloOficial/RPA-data-migration/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/ApolloOficial/RPA-data-migration/actions/workflows/ci.yml/badge.svg"></a>
   <img alt="Python 3.12+" src="https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white">
   <img alt="PostgreSQL" src="https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white">
 </p>
@@ -35,6 +34,8 @@ Copy-Item .env.example .env
 ```
 
 Preencha **`.env` na raiz do repositório** com as URIs reais `LEGACY_DATABASE_URL` e `TARGET_DATABASE_URL`. O arquivo é ignorado pelo Git. Use uma conta somente leitura no legado; a conta de destino precisa executar a procedure e gravar nas tabelas que ela atualiza. Para servidores remotos, inclua `?sslmode=require` na URI quando exigido pelo provedor.
+
+Antes da migração, o legado precisa ter ao menos um usuário `ADMINISTRADOR`, e as empresas, filiais e gerentes precisam referenciar um administrador existente. `--check` valida essa condição e o contrato de colunas do destino, incluindo `employee.is_first_access DEFAULT true`, sem gravar dados. Se uma condição falhar, a execução normal não deve ser iniciada. A [auditoria](docs/auditoria.md) registra o resultado da última verificação do ambiente configurado.
 
 Antes da primeira carga, prepare bancos novos e isolados com os scripts da entrega de Modelagem de Dados. O SQL final reserva `source_id` negativos para os cadastros demonstrativos; os IDs positivos ficam disponíveis para o legado. Execute o dataload **antes** do RPA: ele reinicia tabelas e apagaria uma migração anterior.
 
