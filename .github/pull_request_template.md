@@ -1,59 +1,47 @@
-# Resumo
+#### Descrição
 
-<!-- Descreva o objetivo desta PR e o requisito atendido. -->
+<!-- Escreva uma breve explicação do que foi feito na branch -->
 
-**Card do Jira:** #
+---
 
-## Alterações
+#### Tipo de alteração
 
-- <!-- Resuma a principal alteração. -->
+<!--
+Apague as opções que não se aplicam a esse PR e preencha a descrição ao lado da que você manteve:
 
-## Dados e integrações
+`feat`: Adição de uma nova funcionalidade
+`fix`: Correção de um bug
+`docs`: Alteração apenas de documentação (README, comentários, etc.)
+`style`: Formatação, espaçamento, ponto e vírgula — sem mudança de lógica
+`refactor`: Reestruturação de código que não corrige bug nem adiciona funcionalidade
+`perf`: Alteração que melhora performance
+`test`: Adição ou correção de testes
+`build`: Mudanças que afetam o build ou dependências externas (ex: package.json)
+`ci`: Mudanças em arquivos e scripts de configuração de CI
+`chore`: Tarefas de manutenção que não alteram código de produção (ex: configs, scripts)
+`revert`: Reversão de um commit anterior
+-->
 
-> Marque os itens alterados substituindo `⬜` por `✅`.
+`x`: descrição
 
-- ⬜ Extração do banco legado
-- ⬜ Mapeamento e tratamento de campos
-- ⬜ Staging e procedure do banco normalizado
-- ⬜ Conexões e transações
-- ⬜ Documentação ou CI
+---
 
-**Tabelas de origem e destino:**
+#### Checklist
 
-**Impacto nos dados e recuperação:**
+<!-- Preencha com ✅ ou ❌. Se não se aplica a este PR, escreva N/A. -->
 
-## Testes
+- [ ] Validei o mapeamento entre legado, staging e destino
+- [ ] Executei a validação com --check antes da carga de teste
+- [ ] Verifiquei reexecução, transações e registros rejeitados quando afetados
+- [ ] Conferi as evidências em rpa_load_batch e rpa_load_error
+- [ ] Executei os testes aplicáveis e registrei comandos e resultados nas observações
+- [ ] Não incluí credenciais nem dados sensíveis em código, logs ou evidências
+- [ ] Atualizei a documentação quando houve mudança de uso ou configuração
+- [ ] Commits seguem Conventional Commits e a branch possui nome em inglês
 
-> Marque o que foi validado substituindo `⬜` por `✅`.
+---
 
-- ⬜ Testes automatizados
-- ⬜ Verificação `--check`
-- ⬜ Migração de ponta a ponta
-- ⬜ Reexecução idempotente
-- ⬜ Cenários de falha
+#### Observações
 
-**Comandos executados e resultado:**
+<!-- Informe evidências de validação, dependências ou pontos de atenção. Remova a seção quando não se aplicar. -->
 
-```text
-<!-- Ex.: python -m unittest discover -s tests -v -->
-```
-
-## Impacto
-
-> Marque os impactos aplicáveis substituindo `⬜` por `✅`.
-
-- ⬜ Dados do banco normalizado
-- ⬜ Documentação
-- ⬜ Infraestrutura ou configuração
-- ⬜ Não há impacto externo
-
-## Checklist
-
-- ⬜ Scripts SQL e PDF de referência preservados
-- ⬜ Nenhuma credencial ou dado pessoal versionado
-- ⬜ Limites do contrato de migração documentados
-- ⬜ Aprovações recebidas antes do merge em `main`
-
-## Observações
-
-<!-- Dependências, limitações ou decisões de mapeamento. -->
