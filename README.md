@@ -5,7 +5,6 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/ApolloOficial/RPA-data-migration/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/ApolloOficial/RPA-data-migration/actions/workflows/ci.yml/badge.svg"></a>
   <img alt="Python 3.12+" src="https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white">
   <img alt="PostgreSQL" src="https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white">
 </p>
