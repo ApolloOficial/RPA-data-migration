@@ -18,7 +18,8 @@ Banco legado → extração e tratamento → staging → sincronização → tab
 ```
 
 - A origem é lida em uma transação consistente e somente leitura.
-- O RPA normaliza documentos, e-mails, status e referências entre registros.
+- O RPA normaliza documentos, e-mails e status e preserva os identificadores do legado em `staging`.
+- A procedure do destino resolve as referências entre registros e grava as entidades normalizadas.
 - O destino recebe lotes auditáveis; erros de validação são registrados por lote e por registro.
 - A carga no destino é transacional e pode ser repetida usando os identificadores de origem.
 
@@ -47,16 +48,16 @@ Se a validação passar, execute a migração:
 python -m app
 ```
 
-O `--check` identifica incompatibilidades no destino e falhas de extração antes da carga. A procedure valida as relações necessárias à sincronização; registros com vínculos ausentes podem ser rejeitados individualmente. A execução normal retorna `0` para lote concluído, `2` quando há registros rejeitados pela sincronização e `1` para falha anterior à conclusão. Consulte `staging.rpa_load_batch` e `staging.rpa_load_error` para auditar o resultado e corrigir os dados antes de uma nova execução.
+O `--check` confere a extração e os pré-requisitos estruturais do destino, sem executar a procedure. Um `--check` aprovado não garante que todos os registros serão sincronizados: a procedure ainda pode rejeitar linhas com referências ausentes ou regras de negócio inválidas. A execução normal retorna `0` para lote concluído, `2` quando há registros rejeitados pela sincronização e `1` para falha anterior à conclusão. Consulte `staging.rpa_load_batch` e `staging.rpa_load_error` para auditar o resultado e corrigir os dados antes de uma nova execução.
 
 ## Escopo do mapeamento
 
 | Dados legados | Transformação | Destino |
 | --- | --- | --- |
 | Usuários administradores | Normalização de CPF, e-mail e status | `administrator` |
-| Empresas | Normalização de CNPJ e vínculo com administrador | `company` |
-| Filiais, segmentos e endereços | Consolidação da origem e separação das entidades no destino | `company_unit`, `segment`, `address` |
-| Usuários gerentes | Normalização de CPF, e-mail e status; preservação do hash de senha | `employee` com papel `GERENTE` |
+| Empresas | Normalização de CNPJ; a procedure resolve o identificador do administrador cadastrante | `company` |
+| Filiais, segmentos e endereços | Consolidação dos dados legados; a procedure resolve os vínculos e separa as entidades | `company_unit`, `segment`, `address` |
+| Usuários gerentes | Normalização de CPF, e-mail e status; preservação do hash de senha; a procedure resolve filial e cadastrante | `employee` com papel `GERENTE` |
 
 O banco define `employee.is_first_access = true` para novos funcionários. O RPA não redefine essa marca em sincronizações posteriores. Tipos de usuário e entidades fora do contrato atual da migração são reportados, mas não são convertidos em dados inventados.
 
