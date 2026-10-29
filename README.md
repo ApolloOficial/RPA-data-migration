@@ -47,7 +47,7 @@ Se a validação passar, execute a migração:
 python -m app
 ```
 
-O `--check` identifica vínculos estruturais ausentes e incompatibilidades no destino antes da carga. A execução normal retorna `0` para lote concluído, `2` quando há registros rejeitados pela sincronização e `1` para falha anterior à conclusão. Consulte `staging.rpa_load_batch` e `staging.rpa_load_error` para auditar o resultado e corrigir os dados antes de uma nova execução.
+O `--check` identifica incompatibilidades no destino e falhas de extração antes da carga. A procedure valida as relações necessárias à sincronização; registros com vínculos ausentes podem ser rejeitados individualmente. A execução normal retorna `0` para lote concluído, `2` quando há registros rejeitados pela sincronização e `1` para falha anterior à conclusão. Consulte `staging.rpa_load_batch` e `staging.rpa_load_error` para auditar o resultado e corrigir os dados antes de uma nova execução.
 
 ## Escopo do mapeamento
 

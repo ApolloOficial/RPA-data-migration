@@ -145,13 +145,9 @@ def extract_legacy_snapshot(source):
     if not any(result.values()):
         raise ValueError("legacy snapshot has no records in the migration contract")
     companies = {row["source_id"] for row in result["company"]}
-    units = {row["source_id"] for row in result["company_unit"]}
     for row in result["company_unit"]:
         if row["company_source_id"] not in companies:
             raise ValueError(f"company_unit:{row['source_id']} references an unknown company")
-    for row in result["manager"]:
-        if row["company_unit_source_id"] not in units:
-            raise ValueError(f"manager:{row['source_id']} references an unknown company unit")
     return result, user_types, outside_contract
 
 

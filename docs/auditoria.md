@@ -8,8 +8,8 @@ O RPA transporta cadastros do legado ao banco Apollo: extrai uma fotografia cons
 - O RPA normaliza CPF, CNPJ, e-mail, status e UF. Os identificadores de origem são preservados para permitir reexecuções sem duplicar os mesmos cadastros.
 - Filiais são mapeadas para unidade, segmento e endereço no destino. Novos funcionários recebem `is_first_access = true` pelo padrão do banco; a sincronização não altera a flag existente.
 - O contrato atual inclui administradores, empresas, unidades e gerentes. Tipos de usuário e dados operacionais fora desse escopo são reportados, sem preenchimento artificial.
-- Antes de gravar, `--check` confere as colunas, a rotina de sincronização, o papel `GERENTE`, o padrão de `employee.is_first_access` e as referências estruturais necessárias.
-- O RPA não interrompe a extração por `id_usuario_cadastro` nulo ou sem administrador correspondente. A procedure do destino valida essa regra durante a sincronização; se o vínculo for obrigatório e não puder ser resolvido, o registro é marcado como rejeitado e aparece em `staging.rpa_load_error`.
+- Antes de gravar, `--check` confere as colunas, a rotina de sincronização, o papel `GERENTE` e o padrão de `employee.is_first_access`.
+- O RPA não interrompe a extração por falta de administrador cadastrante ou filial correspondente no snapshot. A procedure do destino valida essas relações durante a sincronização; se algum vínculo obrigatório não puder ser resolvido, o registro é rejeitado e aparece em `staging.rpa_load_error`.
 
 ## Integridade e recuperação
 
@@ -21,6 +21,6 @@ Para investigar ou recuperar uma carga, consulte `staging.rpa_load_batch` e `sta
 
 Os testes automatizados cobrem transformação, validação de referências e destino, origem vazia, falhas, limpeza de payload e encerramento das conexões. Em execuções isoladas anteriores, o RPA processou 9 de 9 registros em duas execuções idempotentes; uma cópia de origem com CNPJ inválido gerou lote `FAILED` sem alterar os cadastros carregados.
 
-Em 26/10/2026, uma consulta somente leitura ao ambiente configurado encontrou 0 administradores, 2 empresas, 3 filiais e 2 gerentes na origem. A versão do RPA naquela data interrompia a extração com `manager:1 has no registering administrator`; essa pré-validação foi removida. A procedure do destino ainda pode rejeitar individualmente os registros sem administrador cadastrante válido. Também foram encontrados três usuários `OPERADOR` e três `TECNICO`, fora do contrato de migração vigente.
+Em 26/10/2026, uma consulta somente leitura ao ambiente configurado encontrou 0 administradores, 2 empresas, 3 filiais e 2 gerentes na origem. A versão anterior do RPA interrompia a extração por referência de administrador ausente; essa pré-validação foi removida. A verificação atual também deixa a procedure avaliar vínculos com filial ausentes no snapshot. A procedure pode rejeitar individualmente registros sem relações obrigatórias resolvidas. Também foram encontrados três usuários `OPERADOR` e três `TECNICO`, fora do contrato de migração vigente.
 
 Em 28/10/2026, a verificação remota não chegou a consultar os bancos porque o DNS não resolveu o host do legado. Nenhuma alteração remota foi feita nessa tentativa. Os resultados acima são históricos; o estado remoto atual requer nova execução de `python -m app --check` com conectividade disponível.
