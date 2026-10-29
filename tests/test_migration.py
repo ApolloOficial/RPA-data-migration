@@ -64,6 +64,45 @@ class MappingTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "no records"):
             extract_legacy_snapshot(Source())
 
+    def test_manager_with_unit_missing_from_snapshot_is_left_for_procedure(self):
+        manager = {
+            "source_id": 1, "full_name": "Carlos Menezes", "email": "carlos@example.org",
+            "cpf": "12345678901", "password_hash": "$2b$10$" + "a" * 53,
+            "company_unit_source_id": None, "registered_by_source_id": None,
+            "status": "Ativo",
+        }
+
+        class Cursor:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_):
+                pass
+
+            def execute(self, query):
+                self.query = query
+
+            def fetchall(self):
+                if "= 'ADMINISTRADOR'" in self.query or "FROM empresa e" in self.query or "FROM filial f" in self.query:
+                    return []
+                if "= 'GERENTE'" in self.query:
+                    return [manager]
+                if "GROUP BY t.nome" in self.query:
+                    return [{"nome": "GERENTE", "total": 1}]
+                if "SELECT 'contrato' AS name" in self.query:
+                    return [{"name": "contrato", "total": 0}, {"name": "inversor", "total": 0},
+                            {"name": "string", "total": 0}, {"name": "painel", "total": 0},
+                            {"name": "manutencao", "total": 0}]
+                return []
+
+        class Source:
+            def cursor(self, **_):
+                return Cursor()
+
+        records, _, _ = extract_legacy_snapshot(Source())
+        self.assertEqual(len(records["manager"]), 1)
+        self.assertIsNone(records["manager"][0]["company_unit_source_id"])
+
     def test_manager_is_normalized_without_rehashing_password(self):
         password = "$2b$10$" + "a" * 53
         row = normalize_legacy_row("manager", {
