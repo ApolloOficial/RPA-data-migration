@@ -13,6 +13,7 @@ from .migration import (
     extract_legacy_snapshot,
     load_staging_batch,
     record_failed_batch,
+    resolve_registering_administrators,
     validate_target_for_migration,
 )
 
@@ -24,13 +25,22 @@ def main(argv=None):
     load_dotenv(Path(__file__).resolve().parent.parent / ".env")
     legacy_dsn = os.getenv("LEGACY_DATABASE_URL")
     target_dsn = os.getenv("TARGET_DATABASE_URL")
+    fallback_admin_id = os.getenv("MIGRATION_ADMIN_SOURCE_ID")
     if not legacy_dsn or not target_dsn:
         parser.error("LEGACY_DATABASE_URL and TARGET_DATABASE_URL must be set")
     try:
+        if fallback_admin_id:
+            try:
+                fallback_admin_id = int(fallback_admin_id)
+            except ValueError as exc:
+                raise ValueError("MIGRATION_ADMIN_SOURCE_ID must be an integer") from exc
         with DatabaseConnections(legacy_dsn, target_dsn) as databases:
             try:
                 records, user_types, outside_contract = extract_legacy_snapshot(databases.source)
                 validate_target_for_migration(databases.target)
+                fallback_count = resolve_registering_administrators(
+                    records, databases.target, fallback_admin_id
+                )
             except ValueError as exc:
                 print(f"Migration stopped: {exc}", file=sys.stderr)
                 if not args.check:
@@ -40,6 +50,11 @@ def main(argv=None):
             counts = ", ".join(f"{key}={len(rows)}" for key, rows in records.items())
             excluded = sum(count for name, count in user_types.items() if name not in ("ADMINISTRADOR", "GERENTE"))
             print(f"Legacy snapshot: {counts}; other user roles excluded={excluded}")
+            if fallback_count:
+                print(
+                    f"Migration registrar fallback: destination administrator source_id="
+                    f"{fallback_admin_id}; records={fallback_count}"
+                )
             print("Outside destination RPA contract: " + ", ".join(
                 f"{name}={count}" for name, count in outside_contract.items()
             ))

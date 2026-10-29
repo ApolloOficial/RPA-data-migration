@@ -35,6 +35,8 @@ Copy-Item .env.example .env
 
 Preencha `LEGACY_DATABASE_URL` e `TARGET_DATABASE_URL` no `.env` da raiz. O arquivo é ignorado pelo Git. Use credenciais somente leitura para a origem e uma conta com permissão para executar a sincronização e gravar no staging do destino. Para conexões remotas, configure SSL conforme exigido pelo provedor.
 
+Se uma empresa, filial ou gerente não tiver administrador cadastrante válido na origem, informe `MIGRATION_ADMIN_SOURCE_ID` com o `source_id` de um administrador já existente no destino. Essa conta será registrada como responsável técnico pela migração nesses cadastros. O pré-check confirma que o administrador configurado existe; sem referência ausente, a variável é opcional. Consulte os `source_id` disponíveis no destino com `SELECT source_id FROM administrator ORDER BY source_id`.
+
 Valide as conexões e o contrato esperado sem gravar dados:
 
 ```powershell
@@ -47,7 +49,7 @@ Se a validação passar, execute a migração:
 python -m app
 ```
 
-A origem precisa conter administradores válidos para registrar empresas, filiais e gerentes. O `--check` identifica referências ausentes antes da carga. A execução normal retorna `0` para lote concluído, `2` quando há registros rejeitados pela sincronização e `1` para falha anterior à conclusão. Consulte `staging.rpa_load_batch` e `staging.rpa_load_error` para auditar o resultado e corrigir os dados antes de uma nova execução.
+O `--check` identifica vínculos estruturais ausentes, referências de administrador sem substituto e incompatibilidades no destino antes da carga. A execução normal retorna `0` para lote concluído, `2` quando há registros rejeitados pela sincronização e `1` para falha anterior à conclusão. Consulte `staging.rpa_load_batch` e `staging.rpa_load_error` para auditar o resultado e corrigir os dados antes de uma nova execução.
 
 ## Escopo do mapeamento
 
