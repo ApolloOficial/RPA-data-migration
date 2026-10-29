@@ -64,11 +64,11 @@ class MappingTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "no records"):
             extract_legacy_snapshot(Source())
 
-    def test_manager_with_unit_missing_from_snapshot_is_left_for_procedure(self):
+    def test_manager_with_unknown_unit_is_left_for_procedure(self):
         manager = {
             "source_id": 1, "full_name": "Carlos Menezes", "email": "carlos@example.org",
             "cpf": "12345678901", "password_hash": "$2b$10$" + "a" * 53,
-            "company_unit_source_id": None, "registered_by_source_id": None,
+            "company_unit_source_id": 1, "registered_by_source_id": None,
             "status": "Ativo",
         }
 
@@ -101,7 +101,7 @@ class MappingTests(unittest.TestCase):
 
         records, _, _ = extract_legacy_snapshot(Source())
         self.assertEqual(len(records["manager"]), 1)
-        self.assertIsNone(records["manager"][0]["company_unit_source_id"])
+        self.assertEqual(records["manager"][0]["company_unit_source_id"], 1)
 
     def test_manager_is_normalized_without_rehashing_password(self):
         password = "$2b$10$" + "a" * 53
