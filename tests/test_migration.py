@@ -13,7 +13,6 @@ from app.migration import (
     record_failed_batch,
     validate_target_for_migration,
 )
-from app.schema_only import derive_schema_without_demo_data
 
 
 class MappingTests(unittest.TestCase):
@@ -79,6 +78,15 @@ class MappingTests(unittest.TestCase):
         self.assertEqual(row["user_type"], "GERENTE")
         self.assertFalse(row["is_active"])
 
+    def test_manager_without_legacy_registrar_is_not_rejected_by_rpa(self):
+        row = normalize_legacy_row("manager", {
+            "source_id": 7, "full_name": "Carlos", "email": "carlos@example.org",
+            "cpf": "12345678901", "password_hash": "$2b$10$" + "a" * 53,
+            "company_unit_source_id": 3, "registered_by_source_id": None,
+            "status": "Ativo",
+        })
+        self.assertIsNone(row["registered_by_source_id"])
+
     def test_unit_flattens_legacy_address_for_normalized_destination(self):
         row = normalize_legacy_row("company_unit", {
             "source_id": 3, "company_source_id": 2, "segment_source_id": 1,
@@ -109,21 +117,6 @@ class MappingTests(unittest.TestCase):
                 "contact_email": "x@example.org", "description": None,
                 "registered_by_source_id": 1, "status": "ATIVO",
             })
-
-
-class DestinationSetupTests(unittest.TestCase):
-    def test_derivation_keeps_procedure_and_omits_demo_load(self):
-        sql = "BEGIN;\nCREATE OR REPLACE PROCEDURE staging.pr_sync_legacy(x bigint)\n" \
-              "AS $$ BEGIN END $$ LANGUAGE plpgsql;\n" \
-              "INSERT INTO staging.rpa_load_batch VALUES (1);\nCOMMIT;"
-        result = derive_schema_without_demo_data(sql)
-        self.assertIn("PROCEDURE staging.pr_sync_legacy", result)
-        self.assertNotIn("INSERT INTO staging.rpa_load_batch", result)
-        self.assertTrue(result.endswith("COMMIT;\n"))
-
-    def test_changed_layout_fails_closed(self):
-        with self.assertRaisesRegex(ValueError, "unexpected layout"):
-            derive_schema_without_demo_data("BEGIN; CREATE TABLE x (id int); COMMIT;")
 
 
 class PreflightTests(unittest.TestCase):

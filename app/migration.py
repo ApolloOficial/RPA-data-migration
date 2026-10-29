@@ -123,8 +123,6 @@ def normalize_legacy_row(table, row):
         item["zip_code"] = normalize_digits(item["zip_code"], 8, table, source_id, "zip_code")
         item["state"] = require_text(item["state"], table, source_id, "state").upper()
         item["phone"] = require_text(item["phone"], table, source_id, "phone")
-    if table != "administrator" and item["registered_by_source_id"] is None:
-        raise ValueError(f"{table}:{source_id} has no registering administrator")
     return item
 
 
@@ -146,17 +144,14 @@ def extract_legacy_snapshot(source):
         outside_contract = {row["name"]: row["total"] for row in cursor.fetchall()}
     if not any(result.values()):
         raise ValueError("legacy snapshot has no records in the migration contract")
-    admins = {row["source_id"] for row in result["administrator"]}
     companies = {row["source_id"] for row in result["company"]}
     units = {row["source_id"] for row in result["company_unit"]}
-    for table in ("company", "company_unit", "manager"):
-        for row in result[table]:
-            if row["registered_by_source_id"] not in admins:
-                raise ValueError(f"{table}:{row['source_id']} references an administrator outside the legacy snapshot")
-            if table == "company_unit" and row["company_source_id"] not in companies:
-                raise ValueError(f"company_unit:{row['source_id']} references an unknown company")
-            if table == "manager" and row["company_unit_source_id"] not in units:
-                raise ValueError(f"manager:{row['source_id']} references an unknown company unit")
+    for row in result["company_unit"]:
+        if row["company_source_id"] not in companies:
+            raise ValueError(f"company_unit:{row['source_id']} references an unknown company")
+    for row in result["manager"]:
+        if row["company_unit_source_id"] not in units:
+            raise ValueError(f"manager:{row['source_id']} references an unknown company unit")
     return result, user_types, outside_contract
 
 
