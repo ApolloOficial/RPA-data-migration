@@ -15,54 +15,45 @@ from app.migration import (
 )
 
 
+class QuerySource:
+    def __init__(self, rows_by_query):
+        self.rows_by_query = rows_by_query
+
+    def cursor(self, **_):
+        return QueryCursor(self.rows_by_query)
+
+
+class QueryCursor:
+    def __init__(self, rows_by_query):
+        self.rows_by_query = rows_by_query
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_):
+        pass
+
+    def execute(self, query):
+        self.query = query
+
+    def fetchall(self):
+        return next((rows for fragment, rows in self.rows_by_query.items() if fragment in self.query), [])
+
+
 class MappingTests(unittest.TestCase):
     def test_mixed_case_legacy_role_is_included(self):
-        class Cursor:
-            def __enter__(self):
-                return self
-
-            def __exit__(self, *_):
-                pass
-
-            def execute(self, query):
-                self.query = query
-
-            def fetchall(self):
-                if "WHERE upper(btrim(t.nome)) = 'ADMINISTRADOR'" in self.query:
-                    return [{"source_id": 1, "full_name": "Ana", "email": "ana@example.org",
-                             "cpf": "12345678901", "status": "Ativo"}]
-                if "GROUP BY t.nome" in self.query:
-                    return [{"nome": "Administrador", "total": 1}]
-                return []
-
-        class Source:
-            def cursor(self, **_):
-                return Cursor()
-
-        records, user_types, _ = extract_legacy_snapshot(Source())
+        source = QuerySource({
+            "= 'ADMINISTRADOR'": [{"source_id": 1, "full_name": "Ana", "email": "ana@example.org",
+                                   "cpf": "12345678901", "status": "Ativo"}],
+            "GROUP BY t.nome": [{"nome": "Administrador", "total": 1}],
+        })
+        records, user_types, _ = extract_legacy_snapshot(source)
         self.assertEqual(len(records["administrator"]), 1)
         self.assertEqual(user_types, {"ADMINISTRADOR": 1})
 
     def test_empty_legacy_snapshot_is_rejected(self):
-        class Cursor:
-            def __enter__(self):
-                return self
-
-            def __exit__(self, *_):
-                pass
-
-            def execute(self, *_):
-                pass
-
-            def fetchall(self):
-                return []
-
-        class Source:
-            def cursor(self, **_):
-                return Cursor()
-
         with self.assertRaisesRegex(ValueError, "no records"):
-            extract_legacy_snapshot(Source())
+            extract_legacy_snapshot(QuerySource({}))
 
     def test_manager_with_unknown_unit_is_left_for_procedure(self):
         manager = {
@@ -72,34 +63,16 @@ class MappingTests(unittest.TestCase):
             "status": "Ativo",
         }
 
-        class Cursor:
-            def __enter__(self):
-                return self
-
-            def __exit__(self, *_):
-                pass
-
-            def execute(self, query):
-                self.query = query
-
-            def fetchall(self):
-                if "= 'ADMINISTRADOR'" in self.query or "FROM empresa e" in self.query or "FROM filial f" in self.query:
-                    return []
-                if "= 'GERENTE'" in self.query:
-                    return [manager]
-                if "GROUP BY t.nome" in self.query:
-                    return [{"nome": "GERENTE", "total": 1}]
-                if "SELECT 'contrato' AS name" in self.query:
-                    return [{"name": "contrato", "total": 0}, {"name": "inversor", "total": 0},
-                            {"name": "string", "total": 0}, {"name": "painel", "total": 0},
-                            {"name": "manutencao", "total": 0}]
-                return []
-
-        class Source:
-            def cursor(self, **_):
-                return Cursor()
-
-        records, _, _ = extract_legacy_snapshot(Source())
+        source = QuerySource({
+            "= 'GERENTE'": [manager],
+            "GROUP BY t.nome": [{"nome": "GERENTE", "total": 1}],
+            "SELECT 'contrato' AS name": [
+                {"name": "contrato", "total": 0}, {"name": "inversor", "total": 0},
+                {"name": "string", "total": 0}, {"name": "painel", "total": 0},
+                {"name": "manutencao", "total": 0},
+            ],
+        })
+        records, _, _ = extract_legacy_snapshot(source)
         self.assertEqual(len(records["manager"]), 1)
         self.assertEqual(records["manager"][0]["company_unit_source_id"], 1)
 
