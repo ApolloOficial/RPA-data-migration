@@ -11,7 +11,6 @@ from app.migration import (
     load_staging_batch,
     normalize_legacy_row,
     record_failed_batch,
-    resolve_registering_administrators,
     validate_target_for_migration,
 )
 
@@ -79,7 +78,7 @@ class MappingTests(unittest.TestCase):
         self.assertEqual(row["user_type"], "GERENTE")
         self.assertFalse(row["is_active"])
 
-    def test_manager_without_legacy_registrar_is_preserved_for_fallback(self):
+    def test_manager_without_legacy_registrar_is_not_rejected_by_rpa(self):
         row = normalize_legacy_row("manager", {
             "source_id": 7, "full_name": "Carlos", "email": "carlos@example.org",
             "cpf": "12345678901", "password_hash": "$2b$10$" + "a" * 53,
@@ -121,63 +120,6 @@ class MappingTests(unittest.TestCase):
 
 
 class PreflightTests(unittest.TestCase):
-    def test_missing_legacy_registrar_uses_explicit_destination_admin(self):
-        records = {
-            "administrator": [],
-            "company": [{"source_id": 4, "registered_by_source_id": None}],
-            "company_unit": [],
-            "manager": [{"source_id": 7, "registered_by_source_id": None}],
-        }
-
-        class Cursor:
-            def __enter__(self):
-                return self
-
-            def __exit__(self, *_):
-                pass
-
-            def execute(self, query):
-                self.query = query
-
-            def fetchall(self):
-                return [(-6,)]
-
-        class Target:
-            def cursor(self):
-                return Cursor()
-
-        self.assertEqual(resolve_registering_administrators(records, Target(), -6), 2)
-        self.assertEqual(records["company"][0]["registered_by_source_id"], -6)
-        self.assertEqual(records["manager"][0]["registered_by_source_id"], -6)
-
-    def test_missing_legacy_registrar_requires_existing_configured_admin(self):
-        records = {
-            "administrator": [], "company": [], "company_unit": [],
-            "manager": [{"source_id": 7, "registered_by_source_id": None}],
-        }
-
-        class Cursor:
-            def __enter__(self):
-                return self
-
-            def __exit__(self, *_):
-                pass
-
-            def execute(self, *_):
-                pass
-
-            def fetchall(self):
-                return []
-
-        class Target:
-            def cursor(self):
-                return Cursor()
-
-        with self.assertRaisesRegex(ValueError, "MIGRATION_ADMIN_SOURCE_ID"):
-            resolve_registering_administrators(records, Target())
-        with self.assertRaisesRegex(ValueError, "does not match an existing"):
-            resolve_registering_administrators(records, Target(), -6)
-
     def test_preflight_checks_destination_schema_procedure_and_role(self):
         queries = []
 

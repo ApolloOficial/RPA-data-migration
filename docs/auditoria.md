@@ -9,7 +9,7 @@ O RPA transporta cadastros do legado ao banco Apollo: extrai uma fotografia cons
 - Filiais são mapeadas para unidade, segmento e endereço no destino. Novos funcionários recebem `is_first_access = true` pelo padrão do banco; a sincronização não altera a flag existente.
 - O contrato atual inclui administradores, empresas, unidades e gerentes. Tipos de usuário e dados operacionais fora desse escopo são reportados, sem preenchimento artificial.
 - Antes de gravar, `--check` confere as colunas, a rotina de sincronização, o papel `GERENTE`, o padrão de `employee.is_first_access` e as referências estruturais necessárias.
-- Se `id_usuario_cadastro` estiver nulo ou não apontar para um administrador disponível, `MIGRATION_ADMIN_SOURCE_ID` pode indicar um administrador já existente no destino. O RPA valida essa conta e a usa como responsável técnico pelo registro migrado; não cria um administrador fictício. A variável é desnecessária quando todas as referências de origem são válidas.
+- O RPA não interrompe a extração por `id_usuario_cadastro` nulo ou sem administrador correspondente. A procedure do destino valida essa regra durante a sincronização; se o vínculo for obrigatório e não puder ser resolvido, o registro é marcado como rejeitado e aparece em `staging.rpa_load_error`.
 
 ## Integridade e recuperação
 
@@ -21,6 +21,6 @@ Para investigar ou recuperar uma carga, consulte `staging.rpa_load_batch` e `sta
 
 Os testes automatizados cobrem transformação, validação de referências e destino, origem vazia, falhas, limpeza de payload e encerramento das conexões. Em execuções isoladas anteriores, o RPA processou 9 de 9 registros em duas execuções idempotentes; uma cópia de origem com CNPJ inválido gerou lote `FAILED` sem alterar os cadastros carregados.
 
-Em 26/10/2026, uma consulta somente leitura ao ambiente configurado encontrou 0 administradores, 2 empresas, 3 filiais e 2 gerentes na origem. Os sete registros de empresas, filiais e gerentes dependiam de administradores ausentes; a versão do RPA naquela data parou com `manager:1 has no registering administrator`. A configuração `MIGRATION_ADMIN_SOURCE_ID` foi adicionada depois para permitir esses cadastros usando um administrador já existente no destino. Também foram encontrados três usuários `OPERADOR` e três `TECNICO`, fora do contrato de migração vigente.
+Em 26/10/2026, uma consulta somente leitura ao ambiente configurado encontrou 0 administradores, 2 empresas, 3 filiais e 2 gerentes na origem. A versão do RPA naquela data interrompia a extração com `manager:1 has no registering administrator`; essa pré-validação foi removida. A procedure do destino ainda pode rejeitar individualmente os registros sem administrador cadastrante válido. Também foram encontrados três usuários `OPERADOR` e três `TECNICO`, fora do contrato de migração vigente.
 
 Em 28/10/2026, a verificação remota não chegou a consultar os bancos porque o DNS não resolveu o host do legado. Nenhuma alteração remota foi feita nessa tentativa. Os resultados acima são históricos; o estado remoto atual requer nova execução de `python -m app --check` com conectividade disponível.

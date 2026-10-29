@@ -155,37 +155,6 @@ def extract_legacy_snapshot(source):
     return result, user_types, outside_contract
 
 
-def resolve_registering_administrators(records, target, fallback_source_id=None):
-    """Use a configured destination administrator when the legacy reference is absent."""
-    source_admins = {row["source_id"] for row in records["administrator"]}
-    with target.cursor() as cursor:
-        cursor.execute("SELECT source_id FROM administrator WHERE source_id IS NOT NULL")
-        destination_admins = {row[0] for row in cursor.fetchall()}
-
-    unresolved = []
-    for table in ("company", "company_unit", "manager"):
-        for row in records[table]:
-            registering_id = row["registered_by_source_id"]
-            if registering_id not in source_admins and registering_id not in destination_admins:
-                unresolved.append((table, row))
-
-    if not unresolved:
-        return 0
-    if fallback_source_id is None:
-        table, row = unresolved[0]
-        raise ValueError(
-            f"{table}:{row['source_id']} has no available registering administrator; "
-            "set MIGRATION_ADMIN_SOURCE_ID to an existing destination administrator source_id"
-        )
-    if fallback_source_id not in destination_admins:
-        raise ValueError(
-            f"MIGRATION_ADMIN_SOURCE_ID {fallback_source_id} does not match an existing destination administrator"
-        )
-    for _, row in unresolved:
-        row["registered_by_source_id"] = fallback_source_id
-    return len(unresolved)
-
-
 def validate_target_for_migration(target):
     """Confere os pré-requisitos do destino e reserva a carga em andamento."""
     expected_columns = [
