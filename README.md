@@ -52,21 +52,19 @@ O RPA compara os identificadores de origem (`source_id`) com os já sincronizado
 
 O `--check` confere as conexões, os pré-requisitos estruturais e quantos registros estão ausentes no destino, sem executar a procedure. A execução normal retorna `0` para lote concluído ou sem novidades, `2` quando há registros rejeitados e `1` para falha anterior à conclusão. Consulte `staging.rpa_load_batch` e `staging.rpa_load_error` para auditar lotes e corrigir rejeições.
 
-### Execução automática no Windows
+### Execução automática na AWS
 
-Com `.env` e `.venv` configurados, instale a tarefa que executa o RPA a cada cinco minutos:
+O AWS Lambda executa o RPA a cada cinco minutos por meio de uma regra do Amazon EventBridge. As URIs ficam em um segredo do AWS Secrets Manager; a função tem permissão de leitura apenas para o segredo informado na implantação. Os logs ficam no Amazon CloudWatch. O empacotamento inclui somente o código da aplicação e as dependências, sem copiar o `.env` local.
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\install_scheduler.ps1
+Crie um segredo JSON no Secrets Manager com as chaves `LEGACY_DATABASE_URL` e `TARGET_DATABASE_URL`. No AWS CloudShell, clone o repositório e execute:
+
+```sh
+sam validate --lint
+sam build
+sam deploy --guided
 ```
 
-Cada execução consulta os bancos, grava a saída em `logs/scheduled-migration.log` e só cria um lote quando encontra IDs ausentes. A tarefa roda enquanto o usuário configurado estiver conectado. Para removê-la:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\uninstall_scheduler.ps1
-```
-
-O agendamento usa o Agendador de Tarefas local porque `pg_cron` executa comandos SQL dentro do PostgreSQL e não inicia o processo Python do RPA. O computador precisa estar ligado e o usuário configurado precisa estar conectado para o monitoramento operar.
+Informe o ARN do segredo no parâmetro `DatabaseSecretArn`. O Makefile empacota dependências para Linux x86_64 e Python 3.12. A Lambda precisa de acesso de rede aos dois bancos. Para desativar a rotina e remover os recursos do stack, use `sam delete`. Para execução manual de desenvolvimento, mantenha `.env` local com as mesmas variáveis; o agendamento em produção não depende do computador do desenvolvedor.
 
 ## Escopo do mapeamento
 
@@ -85,4 +83,4 @@ O banco define `employee.is_first_access = true` para novos funcionários. O RPA
 python -m unittest discover -s tests -v
 ```
 
-As regras de mapeamento, tratamento de falhas e histórico das verificações do RPA estão em [docs/auditoria.md](docs/auditoria.md). A automação pode ser executada sob demanda ou no computador que tenha acesso aos bancos; não requer serviço permanente na cloud.
+As regras de mapeamento, tratamento de falhas e operação na AWS estão em [docs/auditoria.md](docs/auditoria.md).

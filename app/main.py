@@ -18,10 +18,10 @@ from .migration import (
 )
 
 
-def run_once(check=False):
+def run_once(check=False, legacy_dsn=None, target_dsn=None):
     load_dotenv(Path(__file__).resolve().parent.parent / ".env")
-    legacy_dsn = os.getenv("LEGACY_DATABASE_URL")
-    target_dsn = os.getenv("TARGET_DATABASE_URL")
+    legacy_dsn = legacy_dsn or os.getenv("LEGACY_DATABASE_URL")
+    target_dsn = target_dsn or os.getenv("TARGET_DATABASE_URL")
     if not legacy_dsn or not target_dsn:
         print("LEGACY_DATABASE_URL and TARGET_DATABASE_URL must be set", file=sys.stderr)
         return 1
