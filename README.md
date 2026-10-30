@@ -48,7 +48,25 @@ Se a validação passar, execute a migração:
 python -m app
 ```
 
-O `--check` confere a extração e os pré-requisitos estruturais do destino, sem executar a procedure. Um `--check` aprovado não garante que todos os registros serão sincronizados: a procedure ainda pode rejeitar linhas com referências ausentes ou regras de negócio inválidas. A execução normal retorna `0` para lote concluído, `2` quando há registros rejeitados pela sincronização e `1` para falha anterior à conclusão. Consulte `staging.rpa_load_batch` e `staging.rpa_load_error` para auditar o resultado e corrigir os dados antes de uma nova execução.
+O RPA compara os identificadores de origem (`source_id`) com os já sincronizados. Ele envia apenas novos administradores, empresas, filiais e gerentes; se não houver registros novos, não abre um lote. Alterações em registros já sincronizados não são propagadas por esse fluxo.
+
+O `--check` confere as conexões, os pré-requisitos estruturais e quantos registros estão ausentes no destino, sem executar a procedure. A execução normal retorna `0` para lote concluído ou sem novidades, `2` quando há registros rejeitados e `1` para falha anterior à conclusão. Consulte `staging.rpa_load_batch` e `staging.rpa_load_error` para auditar lotes e corrigir rejeições.
+
+### Execução automática no Windows
+
+Com `.env` e `.venv` configurados, instale a tarefa que executa o RPA a cada cinco minutos:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install_scheduler.ps1
+```
+
+Cada execução consulta os bancos, grava a saída em `logs/scheduled-migration.log` e só cria um lote quando encontra IDs ausentes. A tarefa roda enquanto o usuário configurado estiver conectado. Para removê-la:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\uninstall_scheduler.ps1
+```
+
+O agendamento usa o Agendador de Tarefas local porque `pg_cron` executa comandos SQL dentro do PostgreSQL e não inicia o processo Python do RPA. O computador precisa estar ligado e o usuário configurado precisa estar conectado para o monitoramento operar.
 
 ## Escopo do mapeamento
 
@@ -67,4 +85,4 @@ O banco define `employee.is_first_access = true` para novos funcionários. O RPA
 python -m unittest discover -s tests -v
 ```
 
-As regras de mapeamento, tratamento de falhas e histórico das verificações do RPA estão em [docs/auditoria.md](docs/auditoria.md). A automação pode ser executada sob demanda ou agendada em um ambiente com acesso aos bancos; não requer serviço permanente próprio na cloud.
+As regras de mapeamento, tratamento de falhas e histórico das verificações do RPA estão em [docs/auditoria.md](docs/auditoria.md). A automação pode ser executada sob demanda ou no computador que tenha acesso aos bancos; não requer serviço permanente na cloud.

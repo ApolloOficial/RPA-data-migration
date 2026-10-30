@@ -8,7 +8,9 @@ O RPA transporta cadastros do legado ao banco Apollo: extrai uma fotografia cons
 - O RPA normaliza CPF, CNPJ, e-mail, status e UF. Os identificadores de origem são preservados para permitir reexecuções sem duplicar os mesmos cadastros.
 - Filiais são mapeadas para unidade, segmento e endereço no destino. Novos funcionários recebem `is_first_access = true` pelo padrão do banco; a sincronização não altera a flag existente.
 - O contrato atual inclui administradores, empresas, unidades e gerentes. Tipos de usuário e dados operacionais fora desse escopo são reportados, sem preenchimento artificial.
-- Antes de gravar, `--check` confere as colunas, a rotina de sincronização, o papel `GERENTE` e o padrão de `employee.is_first_access`. Ele não executa a procedure nem valida o resultado de cada referência de negócio.
+- Cada execução compara os `source_id` dessas quatro entidades com o destino. Apenas IDs ausentes são enviados; se não houver novidades, nenhum lote é criado. Edições em registros já sincronizados não são propagadas.
+- No Windows, `scripts/install_scheduler.ps1` agenda uma execução a cada cinco minutos enquanto o usuário configurado estiver conectado. Cada execução consulta e fecha as conexões, ignora lotes vazios e registra a saída em `logs/scheduled-migration.log`. O Agendador de Tarefas inicia o Python; `pg_cron` não executa processos externos.
+- Antes de gravar, `--check` confere as colunas, a rotina de sincronização, o papel `GERENTE`, o padrão de `employee.is_first_access` e a quantidade de IDs ausentes. Ele não executa a procedure nem valida o resultado de cada referência de negócio.
 - O RPA não interrompe a extração por falta de administrador cadastrante ou filial correspondente no snapshot. A procedure do destino valida essas relações durante a sincronização; se algum vínculo obrigatório não puder ser resolvido, o registro é rejeitado e aparece em `staging.rpa_load_error`.
 
 ## Integridade e recuperação
