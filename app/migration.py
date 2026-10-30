@@ -89,6 +89,17 @@ TARGET_REQUIRED_COLUMNS = {
     "staging.rpa_load_error": ("load_batch_id", "source_record_key", "error_message", "source_payload"),
 }
 
+TARGET_SOURCE_ID_QUERIES = {
+    "administrator": "SELECT source_id FROM administrator WHERE source_id = ANY(%s)",
+    "company": "SELECT source_id FROM company WHERE source_id = ANY(%s)",
+    "company_unit": "SELECT source_id FROM company_unit WHERE source_id = ANY(%s)",
+    "manager": """
+        SELECT e.source_id, r.name
+        FROM employee e JOIN roles r ON r.id = e.role_id
+        WHERE e.source_id = ANY(%s)
+    """,
+}
+
 
 def normalize_digits(value, length, table, source_id, field):
     normalized = re.sub(r"[^0-9]", "", value or "")
@@ -149,6 +160,33 @@ def extract_legacy_snapshot(source):
         if row["company_source_id"] not in companies:
             raise ValueError(f"company_unit:{row['source_id']} references an unknown company")
     return result, user_types, outside_contract
+
+
+def find_records_missing_from_target(target, records):
+    """Retorna apenas IDs de origem ainda ausentes no banco final."""
+    missing = {}
+    with target.cursor() as cursor:
+        for table, rows in records.items():
+            source_ids = [row["source_id"] for row in rows]
+            if not source_ids:
+                missing[table] = []
+                continue
+
+            cursor.execute(TARGET_SOURCE_ID_QUERIES[table], (source_ids,))
+            target_rows = cursor.fetchall()
+            if table == "manager":
+                wrong_roles = [source_id for source_id, role in target_rows if role != "GERENTE"]
+                if wrong_roles:
+                    raise ValueError(
+                        "manager source IDs already belong to another employee role: "
+                        + ", ".join(map(str, wrong_roles))
+                    )
+                existing_ids = {source_id for source_id, _ in target_rows}
+            else:
+                existing_ids = {row[0] for row in target_rows}
+
+            missing[table] = [row for row in rows if row["source_id"] not in existing_ids]
+    return missing
 
 
 def validate_target_for_migration(target):
