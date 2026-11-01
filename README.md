@@ -48,7 +48,23 @@ Se a validação passar, execute a migração:
 python -m app
 ```
 
-O `--check` confere a extração e os pré-requisitos estruturais do destino, sem executar a procedure. Um `--check` aprovado não garante que todos os registros serão sincronizados: a procedure ainda pode rejeitar linhas com referências ausentes ou regras de negócio inválidas. A execução normal retorna `0` para lote concluído, `2` quando há registros rejeitados pela sincronização e `1` para falha anterior à conclusão. Consulte `staging.rpa_load_batch` e `staging.rpa_load_error` para auditar o resultado e corrigir os dados antes de uma nova execução.
+O RPA compara os identificadores de origem (`source_id`) com os já sincronizados. Ele envia apenas novos administradores, empresas, filiais e gerentes; se não houver registros novos, não abre um lote. Alterações em registros já sincronizados não são propagadas por esse fluxo.
+
+O `--check` confere as conexões, os pré-requisitos estruturais e quantos registros estão ausentes no destino, sem executar a procedure. A execução normal retorna `0` para lote concluído ou sem novidades, `2` quando há registros rejeitados e `1` para falha anterior à conclusão. Consulte `staging.rpa_load_batch` e `staging.rpa_load_error` para auditar lotes e corrigir rejeições.
+
+### Execução automática na AWS
+
+O AWS Lambda executa o RPA a cada cinco minutos por meio de uma regra do Amazon EventBridge. As URIs ficam em um segredo do AWS Secrets Manager; a função tem permissão de leitura apenas para o segredo informado na implantação. Os logs ficam no Amazon CloudWatch. O empacotamento inclui somente o código da aplicação e as dependências, sem copiar o `.env` local.
+
+Crie um segredo JSON no Secrets Manager com as chaves `LEGACY_DATABASE_URL` e `TARGET_DATABASE_URL`. No AWS CloudShell, clone o repositório e execute:
+
+```sh
+sam validate --lint
+sam build
+sam deploy --guided
+```
+
+Informe o ARN do segredo no parâmetro `DatabaseSecretArn`. O Makefile empacota dependências para Linux x86_64 e Python 3.12. A Lambda precisa de acesso de rede aos dois bancos. Para desativar a rotina e remover os recursos do stack, use `sam delete`. Para execução manual de desenvolvimento, mantenha `.env` local com as mesmas variáveis; o agendamento em produção não depende do computador do desenvolvedor.
 
 ## Escopo do mapeamento
 
@@ -67,4 +83,4 @@ O banco define `employee.is_first_access = true` para novos funcionários. O RPA
 python -m unittest discover -s tests -v
 ```
 
-As regras de mapeamento, tratamento de falhas e histórico das verificações do RPA estão em [docs/auditoria.md](docs/auditoria.md). A automação pode ser executada sob demanda ou agendada em um ambiente com acesso aos bancos; não requer serviço permanente próprio na cloud.
+As regras de mapeamento, tratamento de falhas e operação na AWS estão em [docs/auditoria.md](docs/auditoria.md).

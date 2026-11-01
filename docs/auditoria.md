@@ -8,14 +8,17 @@ O RPA transporta cadastros do legado ao banco Apollo: extrai uma fotografia cons
 - O RPA normaliza CPF, CNPJ, e-mail, status e UF. Os identificadores de origem são preservados para permitir reexecuções sem duplicar os mesmos cadastros.
 - Filiais são mapeadas para unidade, segmento e endereço no destino. Novos funcionários recebem `is_first_access = true` pelo padrão do banco; a sincronização não altera a flag existente.
 - O contrato atual inclui administradores, empresas, unidades e gerentes. Tipos de usuário e dados operacionais fora desse escopo são reportados, sem preenchimento artificial.
-- Antes de gravar, `--check` confere as colunas, a rotina de sincronização, o papel `GERENTE` e o padrão de `employee.is_first_access`. Ele não executa a procedure nem valida o resultado de cada referência de negócio.
+- Cada execução compara os `source_id` dessas quatro entidades com o destino. Apenas IDs ausentes são enviados; se não houver novidades, nenhum lote é criado. Edições em registros já sincronizados não são propagadas.
+- Na AWS, o EventBridge agenda a função Lambda a cada cinco minutos. A função lê as URIs do Secrets Manager, consulta e fecha as conexões, ignora lotes vazios e envia logs ao CloudWatch. `ReservedConcurrentExecutions: 1` evita duas invocações simultâneas da função.
+- O segredo do Secrets Manager deve ser JSON com `LEGACY_DATABASE_URL` e `TARGET_DATABASE_URL`; o papel da Lambda recebe somente `secretsmanager:GetSecretValue` para o ARN fornecido.
+- Antes de gravar, `--check` confere as colunas, a rotina de sincronização, o papel `GERENTE`, o padrão de `employee.is_first_access` e a quantidade de IDs ausentes. Ele não executa a procedure nem valida o resultado de cada referência de negócio.
 - O RPA não interrompe a extração por falta de administrador cadastrante ou filial correspondente no snapshot. A procedure do destino valida essas relações durante a sincronização; se algum vínculo obrigatório não puder ser resolvido, o registro é rejeitado e aparece em `staging.rpa_load_error`.
 
 ## Integridade e recuperação
 
 Um lock transacional evita cargas simultâneas no mesmo destino. A escrita no staging e a sincronização são confirmadas em uma única transação; erros de SQL ou conexão causam rollback. Erros de validação registrados na execução normal ficam associados ao lote em `staging.rpa_load_error`; o RPA remove o payload bruto desses erros antes do commit. O modo `--check` não grava dados.
 
-Para investigar ou recuperar uma carga, consulte `staging.rpa_load_batch` e `staging.rpa_load_error`, corrija o registro na fonte ou resolva o conflito indicado e execute novamente. As URIs de conexão ficam no `.env` local, ignorado pelo Git. As tabelas de staging contêm dados transportados e devem ter acesso restrito e retenção definida.
+Para investigar ou recuperar uma carga, consulte `staging.rpa_load_batch` e `staging.rpa_load_error`, corrija o registro na fonte ou resolva o conflito indicado e execute novamente. Na AWS, as URIs de conexão ficam no Secrets Manager. Para desenvolvimento local, use `.env`, ignorado pelo Git. As tabelas de staging contêm dados transportados e devem ter acesso restrito e retenção definida.
 
 ## Evidências do RPA
 
