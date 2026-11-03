@@ -1,29 +1,27 @@
-# Auditoria e decisões da migração
+# Auditoria e justificativas da migração
 
-O RPA transporta cadastros do legado ao banco Apollo: extrai uma fotografia consistente, normaliza campos, preserva os identificadores de origem, grava um lote auditável em `staging` e solicita a procedure de sincronização. A procedure resolve as referências e grava as entidades normalizadas.
+## Escopo
 
-## Mapeamento e limites
+O RPA migra administradores, empresas, filiais e gerentes. Esses cadastros formam a base administrativa necessária para relacionar usuários, organizações e unidades no banco normalizado.
 
-- A leitura da origem ocorre em transação `REPEATABLE READ READ ONLY`. São extraídos administradores, empresas, filiais, segmentos, endereços e gerentes.
-- O RPA normaliza CPF, CNPJ, e-mail, status e UF. Os identificadores de origem são preservados para permitir reexecuções sem duplicar os mesmos cadastros.
-- Filiais são mapeadas para unidade, segmento e endereço no destino. Novos funcionários recebem `is_first_access = true` pelo padrão do banco; a sincronização não altera a flag existente.
-- O contrato atual inclui administradores, empresas, unidades e gerentes. Tipos de usuário e dados operacionais fora desse escopo são reportados, sem preenchimento artificial.
-- Cada execução compara os `source_id` dessas quatro entidades com o destino. Apenas IDs ausentes são enviados; se não houver novidades, nenhum lote é criado. Edições em registros já sincronizados não são propagadas.
-- Na AWS, o EventBridge agenda a função Lambda a cada cinco minutos. A função lê as URIs do Secrets Manager, consulta e fecha as conexões, ignora lotes vazios e envia logs ao CloudWatch. `ReservedConcurrentExecutions: 1` evita duas invocações simultâneas da função.
-- O segredo do Secrets Manager deve ser JSON com `LEGACY_DATABASE_URL` e `TARGET_DATABASE_URL`; o papel da Lambda recebe somente `secretsmanager:GetSecretValue` para o ARN fornecido.
-- Antes de gravar, `--check` confere as colunas, a rotina de sincronização, o papel `GERENTE`, o padrão de `employee.is_first_access` e a quantidade de IDs ausentes. Ele não executa a procedure nem valida o resultado de cada referência de negócio.
-- O RPA não interrompe a extração por falta de administrador cadastrante ou filial correspondente no snapshot. A procedure do destino valida essas relações durante a sincronização; se algum vínculo obrigatório não puder ser resolvido, o registro é rejeitado e aparece em `staging.rpa_load_error`.
+Contratos, inversores, strings, painéis e manutenções ficam fora desta carga: pertencem ao fluxo operacional e não têm mapeamento de migração neste RPA. Importá-los sem resolver suas relações e regras próprias poderia criar dados incompletos. Outros tipos de usuário também são excluídos porque não fazem parte do contrato atual de destino. A execução apenas informa as quantidades fora do escopo; não cria dados substitutos.
 
-## Integridade e recuperação
+Filiais são divididas entre unidade, segmento e endereço. O RPA normaliza CPF, CNPJ, e-mail, status, UF e CEP e preserva o ID legado como `source_id`. A procedure do destino resolve os vínculos e grava as entidades normalizadas.
 
-Um lock transacional evita cargas simultâneas no mesmo destino. A escrita no staging e a sincronização são confirmadas em uma única transação; erros de SQL ou conexão causam rollback. Erros de validação registrados na execução normal ficam associados ao lote em `staging.rpa_load_error`; o RPA remove o payload bruto desses erros antes do commit. O modo `--check` não grava dados.
+## Decisões de integridade
 
-Para investigar ou recuperar uma carga, consulte `staging.rpa_load_batch` e `staging.rpa_load_error`, corrija o registro na fonte ou resolva o conflito indicado e execute novamente. Na AWS, as URIs de conexão ficam no Secrets Manager. Para desenvolvimento local, use `.env`, ignorado pelo Git. As tabelas de staging contêm dados transportados e devem ter acesso restrito e retenção definida.
+- A origem é lida em uma transação consistente e somente leitura.
+- Cada execução compara os IDs de origem com os do destino e envia apenas os que ainda não existem. Isso permite repetir a carga sem duplicar cadastros. Alterações em registros já migrados não são propagadas para evitar sobrescrever dados do destino sem uma política de atualização definida.
+- A gravação no staging e a sincronização ocorrem na mesma transação do destino. Erros de SQL causam rollback; registros recusados pela validação da procedure são identificados no lote e em `staging.rpa_load_error`.
+- O `--check` conta os registros ausentes e confere a estrutura necessária, mas não executa a procedure nem garante que todos os vínculos serão aceitos. Um responsável cadastrante nulo, por exemplo, pode ser rejeitado pelo staging ou pela regra do destino durante a execução.
+- O lock transacional e `ReservedConcurrentExecutions: 1` evitam sobreposição de cargas no mesmo destino.
 
-## Evidências do RPA
+## Operação e recuperação
 
-Os testes automatizados cobrem transformação, validação de referências e destino, origem vazia, falhas, limpeza de payload e encerramento das conexões. Em execuções isoladas anteriores, o RPA processou 9 de 9 registros em duas execuções idempotentes; uma cópia de origem com CNPJ inválido gerou lote `FAILED` sem alterar os cadastros carregados.
+Na AWS, o EventBridge agenda a Lambda a cada cinco minutos. As URIs ficam no Secrets Manager; os logs de execução ficam no CloudWatch. A função precisa de acesso de rede aos dois bancos. A origem deve usar credencial somente leitura.
 
-Em 26/10/2026, uma consulta somente leitura ao ambiente configurado encontrou 0 administradores, 2 empresas, 3 filiais e 2 gerentes na origem. A versão anterior do RPA interrompia a extração por referência de administrador ausente; essa pré-validação foi removida. A verificação atual também deixa a procedure avaliar vínculos com filial ausentes no snapshot. A procedure pode rejeitar individualmente registros sem relações obrigatórias resolvidas. Também foram encontrados três usuários `OPERADOR` e três `TECNICO`, fora do contrato de migração vigente.
+Para investigar uma execução, consulte `staging.rpa_load_batch` e `staging.rpa_load_error`. Corrija a causa na origem ou resolva o vínculo indicado no destino e execute novamente. O RPA remove o payload bruto de erro antes de confirmar o lote. Em desenvolvimento local, configure `LEGACY_DATABASE_URL` e `TARGET_DATABASE_URL` em `.env`, que não é versionado.
 
-Em 28/10/2026, uma tentativa de verificação não chegou aos bancos porque o ambiente não resolveu o host do legado. Em 29/10/2026, `python -m app --check` conectou aos dois bancos e passou sem gravar dados. A origem ainda tinha 0 administradores, 2 empresas, 3 filiais e 2 gerentes. A leitura da procedure confirmou que o destino exige administrador cadastrante para empresas e filiais, e filial válida para gerentes; por isso, o pré-check aprovado não confirma uma carga bem-sucedida. Nenhuma carga de migração foi executada nessa verificação.
+## Evidência de execução
+
+Na execução reportada pela equipe, o lote 4 terminou como `COMPLETED`: 12 registros processados e nenhum erro (5 administradores, 2 empresas, 3 filiais e 2 gerentes).
