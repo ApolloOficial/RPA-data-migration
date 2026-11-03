@@ -1,0 +1,299 @@
+ATUALIZAÇÃO DOCUMENTAL — 26/10/2026
+Os planos abaixo foram coletados em 11–12/10/2026 para as consultas indicadas. Não foram reexecutados após a inclusão de password_recovery, sungrow_credential, das novas colunas de vw_string_panels e da separação entre script de construção e dataloads. A alteração de esquema não muda a consulta temporal nem a view de desempenho analisadas; este arquivo não contém plano de execução de vw_string_panels ou das novas tabelas.
+PostgreSQL 16, banco descartável, dataload + RPA executados em 2026-10-11.
+Consulta sem índice executada dentro de transação revertida; o índice original foi restaurado antes da segunda medição.
+
+CONSULTA TEMPORAL SEM INDICE DE DATA
+BEGIN
+DROP INDEX
+                                                                  QUERY PLAN                                                                   
+-----------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=1234.86..1235.11 rows=100 width=14) (actual time=15.817..15.841 rows=100 loops=1)
+   Buffers: shared hit=512
+   ->  Sort  (cost=1234.86..1241.57 rows=2684 width=14) (actual time=15.814..15.824 rows=100 loops=1)
+         Sort Key: measured_at DESC
+         Sort Method: top-N heapsort  Memory: 31kB
+         Buffers: shared hit=512
+         ->  Seq Scan on string_performance_measurement  (cost=0.00..1132.28 rows=2684 width=14) (actual time=0.204..15.138 rows=2544 loops=1)
+               Filter: (measured_at >= (CURRENT_TIMESTAMP - '1 day'::interval))
+               Rows Removed by Filter: 33072
+               Buffers: shared hit=509
+ Planning:
+   Buffers: shared hit=133
+ Planning Time: 1.221 ms
+ Execution Time: 15.898 ms
+(14 rows)
+
+ROLLBACK
+CONSULTA TEMPORAL COM INDICE DE DATA
+                                                                                 QUERY PLAN                                                                                 
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=0.29..78.47 rows=100 width=14) (actual time=0.020..0.155 rows=100 loops=1)
+   Buffers: shared hit=102
+   ->  Index Scan Backward using ix_measurement_date on string_performance_measurement  (cost=0.29..2098.43 rows=2684 width=14) (actual time=0.019..0.138 rows=100 loops=1)
+         Index Cond: (measured_at >= (CURRENT_TIMESTAMP - '1 day'::interval))
+         Buffers: shared hit=102
+ Planning:
+   Buffers: shared hit=17
+ Planning Time: 0.227 ms
+ Execution Time: 0.234 ms
+(9 rows)
+
+VIEW ANALITICA COM CTE E JANELAS
+                                                                                                                                                QUERY PLAN                                                                                                                                                
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=122373.03..122373.08 rows=20 width=92) (actual time=158.895..158.913 rows=20 loops=1)
+   Buffers: shared hit=1714
+   ->  Sort  (cost=122373.03..122565.36 rows=76931 width=92) (actual time=105.793..105.807 rows=20 loops=1)
+         Sort Key: fact_string_daily_performance.measurement_date DESC
+         Sort Method: top-N heapsort  Memory: 27kB
+         Buffers: shared hit=1714
+         ->  Subquery Scan on fact_string_daily_performance  (cost=108593.99..120325.92 rows=76931 width=92) (actual time=104.249..105.624 rows=371 loops=1)
+               Buffers: shared hit=1711
+               ->  Subquery Scan on analytic  (cost=108593.99..119556.61 rows=76931 width=256) (actual time=104.243..105.554 rows=371 loops=1)
+                     Filter: (analytic.measurement_date >= (((CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo'::text))::date - 7))
+                     Rows Removed by Filter: 371
+                     Buffers: shared hit=1711
+                     ->  WindowAgg  (cost=108593.99..114363.79 rows=230792 width=284) (actual time=104.214..105.065 rows=742 loops=1)
+                           Buffers: shared hit=1711
+                           ->  Sort  (cost=108593.99..109170.97 rows=230792 width=108) (actual time=104.112..104.185 rows=742 loops=1)
+                                 Sort Key: d.string_key, d.measurement_date
+                                 Sort Method: quicksort  Memory: 88kB
+                                 Buffers: shared hit=1711
+                                 ->  WindowAgg  (cost=68275.99..74622.77 rows=230792 width=108) (actual time=102.543..103.569 rows=742 loops=1)
+                                       Buffers: shared hit=1711
+                                       ->  Sort  (cost=68275.99..68852.97 rows=230792 width=100) (actual time=102.479..102.561 rows=742 loops=1)
+                                             Sort Key: d.inverter_key, d.measurement_date, ((d.generated_energy_kwh / NULLIF(d.nominal_power_wp, '0'::numeric))) DESC
+                                             Sort Method: quicksort  Memory: 82kB
+                                             Buffers: shared hit=1711
+                                             ->  Subquery Scan on d  (cost=574.82..35092.27 rows=230792 width=100) (actual time=3.268..101.012 rows=742 loops=1)
+                                                   Buffers: shared hit=1708
+                                                   ->  GroupAggregate  (cost=574.82..31630.39 rows=230792 width=180) (actual time=3.262..100.565 rows=742 loops=1)
+                                                         Group Key: m.string_id, s.inverter_id, (((m.measured_at AT TIME ZONE 'America/Sao_Paulo'::text))::date), (((count(p.id) FILTER (WHERE ((p.operating_stats)::text = ANY ('{OPERACIONAL,MANUTENCAO,FALHA}'::text[]))))::numeric * pm.pmax_w))
+                                                         Buffers: shared hit=1708
+                                                         ->  Incremental Sort  (cost=574.82..24706.63 rows=230792 width=74) (actual time=3.217..86.489 rows=35616 loops=1)
+                                                               Sort Key: m.string_id, s.inverter_id, (((m.measured_at AT TIME ZONE 'America/Sao_Paulo'::text))::date), (((count(p.id) FILTER (WHERE ((p.operating_stats)::text = ANY ('{OPERACIONAL,MANUTENCAO,FALHA}'::text[]))))::numeric * pm.pmax_w))
+                                                               Presorted Key: m.string_id
+                                                               Full-sort Groups: 53  Sort Method: quicksort  Average Memory: 29kB  Peak Memory: 29kB
+                                                               Pre-sorted Groups: 53  Sort Method: quicksort  Average Memory: 75kB  Peak Memory: 75kB
+                                                               Buffers: shared hit=1708
+                                                               ->  Nested Loop  (cost=173.96..7902.34 rows=230792 width=74) (actual time=1.858..65.702 rows=35616 loops=1)
+                                                                     Buffers: shared hit=1708
+                                                                     ->  Merge Join  (cost=173.53..230.76 rows=350 width=80) (actual time=1.805..3.160 rows=54 loops=1)
+                                                                           Merge Cond: (s_1.id = s.id)
+                                                                           Buffers: shared hit=71
+                                                                           ->  GroupAggregate  (cost=167.44..204.70 rows=1296 width=77) (actual time=1.755..2.943 rows=54 loops=1)
+                                                                                 Group Key: s_1.id, pm.pmax_w
+                                                                                 Buffers: shared hit=67
+                                                                                 ->  Sort  (cost=167.44..170.68 rows=1296 width=56) (actual time=1.713..1.894 rows=1296 loops=1)
+                                                                                       Sort Key: s_1.id, pm.pmax_w
+                                                                                       Sort Method: quicksort  Memory: 160kB
+                                                                                       Buffers: shared hit=67
+                                                                                       ->  Hash Right Join  (cost=8.66..100.44 rows=1296 width=56) (actual time=0.316..1.071 rows=1296 loops=1)
+                                                                                             Hash Cond: (p.string_id = s_1.id)
+                                                                                             Buffers: shared hit=67
+                                                                                             ->  Seq Scan on panel p  (cost=0.00..73.96 rows=1296 width=35) (actual time=0.096..0.387 rows=1296 loops=1)
+                                                                                                   Buffers: shared hit=61
+                                                                                             ->  Hash  (cost=7.98..7.98 rows=54 width=37) (actual time=0.204..0.208 rows=54 loops=1)
+                                                                                                   Buckets: 1024  Batches: 1  Memory Usage: 12kB
+                                                                                                   Buffers: shared hit=6
+                                                                                                   ->  Nested Loop  (cost=0.16..7.98 rows=54 width=37) (actual time=0.137..0.190 rows=54 loops=1)
+                                                                                                         Buffers: shared hit=6
+                                                                                                         ->  Seq Scan on string s_1  (cost=0.00..4.54 rows=54 width=40) (actual time=0.087..0.102 rows=54 loops=1)
+                                                                                                               Buffers: shared hit=4
+                                                                                                         ->  Memoize  (cost=0.16..1.07 rows=1 width=13) (actual time=0.001..0.001 rows=1 loops=54)
+                                                                                                               Cache Key: s_1.panel_model_id
+                                                                                                               Cache Mode: logical
+                                                                                                               Hits: 53  Misses: 1  Evictions: 0  Overflows: 0  Memory Usage: 1kB
+                                                                                                               Buffers: shared hit=2
+                                                                                                               ->  Index Scan using panel_model_pkey on panel_model pm  (cost=0.15..1.06 rows=1 width=13) (actual time=0.018..0.018 rows=1 loops=1)
+                                                                                                                     Index Cond: (id = s_1.panel_model_id)
+                                                                                                                     Buffers: shared hit=2
+                                                                           ->  Sort  (cost=6.09..6.23 rows=54 width=32) (actual time=0.039..0.065 rows=54 loops=1)
+                                                                                 Sort Key: s.id
+                                                                                 Sort Method: quicksort  Memory: 27kB
+                                                                                 Buffers: shared hit=4
+                                                                                 ->  Seq Scan on string s  (cost=0.00..4.54 rows=54 width=32) (actual time=0.008..0.018 rows=54 loops=1)
+                                                                                       Buffers: shared hit=4
+                                                                     ->  Memoize  (cost=0.42..65.19 rows=672 width=30) (actual time=0.015..0.652 rows=660 loops=54)
+                                                                           Cache Key: s.id
+                                                                           Cache Mode: logical
+                                                                           Hits: 0  Misses: 54  Evictions: 0  Overflows: 0  Memory Usage: 2173kB
+                                                                           Buffers: shared hit=1637
+                                                                           ->  Index Scan using uq_measurement_string_time on string_performance_measurement m  (cost=0.41..65.18 rows=672 width=30) (actual time=0.012..0.298 rows=660 loops=54)
+                                                                                 Index Cond: (string_id = s.id)
+                                                                                 Buffers: shared hit=1637
+ Planning:
+   Buffers: shared hit=567
+ Planning Time: 3.710 ms
+ JIT:
+   Functions: 62
+   Options: Inlining false, Optimization false, Expressions true, Deforming true
+   Timing: Generation 4.149 ms, Inlining 0.000 ms, Optimization 1.940 ms, Emission 51.373 ms, Total 57.461 ms
+ Execution Time: 195.011 ms
+(89 rows)
+
+NOVAS VIEWS DO BI — 12/10/2026
+Banco descartável PostgreSQL 16; script de construção completo, sem dataload ou RPA nesta rodada.
+
+dm.dim_maintenance_type
+                                                QUERY PLAN                                                 
+-----------------------------------------------------------------------------------------------------------
+ Seq Scan on maintenance_type  (cost=0.00..1.04 rows=4 width=22) (actual time=0.028..0.033 rows=4 loops=1)
+   Buffers: shared hit=1
+ Planning:
+   Buffers: shared hit=75
+ Planning Time: 3.975 ms
+ Execution Time: 0.211 ms
+(6 rows)
+
+
+dm.dim_part
+                                          QUERY PLAN                                           
+-----------------------------------------------------------------------------------------------
+ Seq Scan on part  (cost=0.00..1.06 rows=6 width=60) (actual time=0.121..0.125 rows=6 loops=1)
+   Buffers: shared hit=1
+ Planning:
+   Buffers: shared hit=46
+ Planning Time: 0.841 ms
+ Execution Time: 0.160 ms
+(6 rows)
+
+
+dm.fact_warning
+                                                                                QUERY PLAN                                                                                 
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Nested Loop Left Join  (cost=21.75..30.67 rows=2 width=205) (actual time=7.301..8.015 rows=6 loops=1)
+   Join Filter: (mr.warning_id = w.id)
+   Rows Removed by Join Filter: 15
+   Buffers: shared hit=33
+   ->  Nested Loop  (cost=21.75..29.36 rows=2 width=127) (actual time=1.282..1.847 rows=6 loops=1)
+         Join Filter: (i.company_unit_id = cu.id)
+         Rows Removed by Join Filter: 1
+         Buffers: shared hit=32
+         ->  Nested Loop  (cost=21.75..28.25 rows=2 width=127) (actual time=1.192..1.732 rows=6 loops=1)
+               Buffers: shared hit=31
+               ->  Nested Loop  (cost=21.62..27.63 rows=2 width=111) (actual time=1.122..1.228 rows=6 loops=1)
+                     Join Filter: (w_1.id = w.id)
+                     Rows Removed by Join Filter: 30
+                     Buffers: shared hit=19
+                     ->  Seq Scan on warning w  (cost=0.00..1.06 rows=6 width=63) (actual time=0.039..0.049 rows=6 loops=1)
+                           Buffers: shared hit=1
+                     ->  Materialize  (cost=21.62..26.39 rows=2 width=56) (actual time=0.178..0.190 rows=6 loops=6)
+                           Buffers: shared hit=18
+                           ->  Hash Join  (cost=21.62..26.38 rows=2 width=56) (actual time=1.050..1.095 rows=6 loops=1)
+                                 Hash Cond: (s.id = COALESCE(w_1.string_id, p.string_id))
+                                 Buffers: shared hit=18
+                                 ->  Seq Scan on string s  (cost=0.00..4.54 rows=54 width=32) (actual time=0.140..0.227 rows=54 loops=1)
+                                       Buffers: shared hit=4
+                                 ->  Hash  (cost=21.55..21.55 rows=6 width=40) (actual time=0.737..0.745 rows=6 loops=1)
+                                       Buckets: 1024  Batches: 1  Memory Usage: 9kB
+                                       Buffers: shared hit=14
+                                       ->  Nested Loop Left Join  (cost=0.29..21.55 rows=6 width=40) (actual time=0.048..0.708 rows=6 loops=1)
+                                             Buffers: shared hit=14
+                                             ->  Seq Scan on warning w_1  (cost=0.00..1.06 rows=6 width=32) (actual time=0.004..0.009 rows=6 loops=1)
+                                                   Buffers: shared hit=1
+                                             ->  Memoize  (cost=0.29..7.64 rows=1 width=24) (actual time=0.112..0.113 rows=0 loops=6)
+                                                   Cache Key: w_1.panel_id
+                                                   Cache Mode: logical
+                                                   Hits: 3  Misses: 3  Evictions: 0  Overflows: 0  Memory Usage: 1kB
+                                                   Buffers: shared hit=13
+                                                   ->  Index Scan using panel_pkey on panel p  (cost=0.28..7.63 rows=1 width=24) (actual time=0.211..0.212 rows=1 loops=3)
+                                                         Index Cond: (id = w_1.panel_id)
+                                                         Buffers: shared hit=12
+               ->  Index Scan using inverter_pkey on inverter i  (cost=0.13..0.37 rows=1 width=32) (actual time=0.023..0.024 rows=1 loops=6)
+                     Index Cond: (id = s.inverter_id)
+                     Buffers: shared hit=12
+         ->  Materialize  (cost=0.00..1.04 rows=3 width=16) (actual time=0.015..0.015 rows=1 loops=6)
+               Buffers: shared hit=1
+               ->  Seq Scan on company_unit cu  (cost=0.00..1.03 rows=3 width=16) (actual time=0.074..0.078 rows=2 loops=1)
+                     Buffers: shared hit=1
+   ->  Materialize  (cost=0.00..1.09 rows=6 width=34) (actual time=0.014..0.018 rows=4 loops=6)
+         Buffers: shared hit=1
+         ->  Seq Scan on maintenance_register mr  (cost=0.00..1.06 rows=6 width=34) (actual time=0.069..0.081 rows=6 loops=1)
+               Buffers: shared hit=1
+ Planning:
+   Buffers: shared hit=818
+ Planning Time: 34.455 ms
+ Execution Time: 9.946 ms
+(53 rows)
+
+
+dm.fact_relocation
+                                                                           QUERY PLAN                                                                           
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Append  (cost=1.20..38.74 rows=9 width=173) (actual time=0.207..7.262 rows=9 loops=1)
+   Buffers: shared hit=511
+   ->  Nested Loop  (cost=1.20..8.01 rows=3 width=173) (actual time=0.205..0.273 rows=3 loops=1)
+         Join Filter: (i.company_unit_id = cu.id)
+         Rows Removed by Join Filter: 1
+         Buffers: shared hit=12
+         ->  Nested Loop  (cost=1.20..6.83 rows=3 width=85) (actual time=0.145..0.196 rows=3 loops=1)
+               Buffers: shared hit=11
+               ->  Hash Join  (cost=1.07..5.84 rows=3 width=85) (actual time=0.116..0.151 rows=3 loops=1)
+                     Hash Cond: (s.id = r.string_id)
+                     Buffers: shared hit=5
+                     ->  Seq Scan on string s  (cost=0.00..4.54 rows=54 width=32) (actual time=0.034..0.054 rows=54 loops=1)
+                           Buffers: shared hit=4
+                     ->  Hash  (cost=1.03..1.03 rows=3 width=69) (actual time=0.038..0.041 rows=3 loops=1)
+                           Buckets: 1024  Batches: 1  Memory Usage: 9kB
+                           Buffers: shared hit=1
+                           ->  Seq Scan on suggested_internal_relocation r  (cost=0.00..1.03 rows=3 width=69) (actual time=0.019..0.025 rows=3 loops=1)
+                                 Buffers: shared hit=1
+               ->  Index Scan using inverter_pkey on inverter i  (cost=0.13..0.37 rows=1 width=32) (actual time=0.009..0.010 rows=1 loops=3)
+                     Index Cond: (id = s.inverter_id)
+                     Buffers: shared hit=6
+         ->  Materialize  (cost=0.00..1.04 rows=3 width=16) (actual time=0.010..0.011 rows=1 loops=3)
+               Buffers: shared hit=1
+               ->  Seq Scan on company_unit cu  (cost=0.00..1.03 rows=3 width=16) (actual time=0.023..0.024 rows=2 loops=1)
+                     Buffers: shared hit=1
+   ->  Nested Loop  (cost=26.11..30.68 rows=6 width=173) (actual time=6.807..6.973 rows=6 loops=1)
+         Join Filter: (i_1.company_unit_id = cu_1.id)
+         Buffers: shared hit=499
+         ->  Nested Loop  (cost=26.11..29.36 rows=6 width=89) (actual time=6.590..6.714 rows=6 loops=1)
+               Join Filter: (s_1.inverter_id = i_1.id)
+               Buffers: shared hit=498
+               ->  Nested Loop  (cost=26.11..28.10 rows=6 width=89) (actual time=6.531..6.641 rows=6 loops=1)
+                     Buffers: shared hit=497
+                     ->  Merge Join  (cost=25.97..27.04 rows=6 width=73) (actual time=6.423..6.489 rows=6 loops=1)
+                           Merge Cond: (p.id = r_1.panel_id)
+                           Buffers: shared hit=481
+                           ->  Index Scan using panel_pkey on panel p  (cost=0.28..209.19 rows=1296 width=24) (actual time=0.160..3.239 rows=157 loops=1)
+                                 Buffers: shared hit=480
+                           ->  Sort  (cost=1.14..1.15 rows=6 width=57) (actual time=3.123..3.130 rows=6 loops=1)
+                                 Sort Key: r_1.panel_id
+                                 Sort Method: quicksort  Memory: 25kB
+                                 Buffers: shared hit=1
+                                 ->  Seq Scan on suggested_external_relocation r_1  (cost=0.00..1.06 rows=6 width=57) (actual time=0.065..0.074 rows=6 loops=1)
+                                       Buffers: shared hit=1
+                     ->  Index Scan using string_pkey on string s_1  (cost=0.14..0.18 rows=1 width=32) (actual time=0.019..0.019 rows=1 loops=6)
+                           Index Cond: (id = p.string_id)
+                           Buffers: shared hit=15
+               ->  Materialize  (cost=0.00..1.04 rows=3 width=32) (actual time=0.008..0.008 rows=1 loops=6)
+                     Buffers: shared hit=1
+                     ->  Seq Scan on inverter i_1  (cost=0.00..1.03 rows=3 width=32) (actual time=0.034..0.034 rows=1 loops=1)
+                           Buffers: shared hit=1
+         ->  Materialize  (cost=0.00..1.04 rows=3 width=16) (actual time=0.034..0.034 rows=1 loops=6)
+               Buffers: shared hit=1
+               ->  Seq Scan on company_unit cu_1  (cost=0.00..1.03 rows=3 width=16) (actual time=0.023..0.023 rows=1 loops=1)
+                     Buffers: shared hit=1
+ Planning:
+   Buffers: shared hit=139
+ Planning Time: 28.905 ms
+ Execution Time: 11.318 ms
+(59 rows)
+
+
+dm.fact_stock
+                                             QUERY PLAN                                             
+----------------------------------------------------------------------------------------------------
+ Seq Scan on stock s  (cost=0.00..1.21 rows=12 width=79) (actual time=0.049..0.070 rows=12 loops=1)
+   Buffers: shared hit=1
+ Planning:
+   Buffers: shared hit=58
+ Planning Time: 0.901 ms
+ Execution Time: 0.119 ms
+(6 rows)
+
+ATUALIZAÇÃO DOCUMENTAL — 29/10/2026
+Os planos EXPLAIN ANALYZE acima são os resultados coletados em 11–12/10/2026. Não foram executados novamente nesta revisão e não devem ser apresentados como medição das alterações posteriores. O dataload formal está incluído na entrega com o nome atual `Dataload_Apollo_Formal_500_Registros.sql`; a mudança de nome não altera os planos registrados. Esta revisão não executou SQL nem consultou os bancos para gerar planos novos.
