@@ -1,0 +1,34 @@
+BEGIN
+DROP INDEX
+                                                                 QUERY PLAN                                                                  
+---------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=1063.51..1063.76 rows=100 width=24) (actual time=4.448..4.466 rows=100 loops=1)
+   Buffers: shared hit=512
+   ->  Sort  (cost=1063.51..1070.66 rows=2860 width=24) (actual time=4.446..4.453 rows=100 loops=1)
+         Sort Key: measured_at DESC
+         Sort Method: top-N heapsort  Memory: 39kB
+         Buffers: shared hit=512
+         ->  Seq Scan on string_performance_measurement  (cost=0.00..954.20 rows=2860 width=24) (actual time=0.016..3.583 rows=2597 loops=1)
+               Filter: (measured_at >= '2026-10-30 17:45:00-03'::timestamp with time zone)
+               Rows Removed by Filter: 33019
+               Buffers: shared hit=509
+ Planning:
+   Buffers: shared hit=130
+ Planning Time: 0.495 ms
+ Execution Time: 4.512 ms
+(14 rows)
+
+ROLLBACK
+                                                                                 QUERY PLAN                                                                                 
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=0.29..73.76 rows=100 width=24) (actual time=0.020..0.052 rows=100 loops=1)
+   Buffers: shared hit=5
+   ->  Index Scan Backward using ix_measurement_date on string_performance_measurement  (cost=0.29..2101.49 rows=2860 width=24) (actual time=0.019..0.041 rows=100 loops=1)
+         Index Cond: (measured_at >= '2026-10-30 17:45:00-03'::timestamp with time zone)
+         Buffers: shared hit=5
+ Planning:
+   Buffers: shared hit=17
+ Planning Time: 0.194 ms
+ Execution Time: 0.069 ms
+(9 rows)
+
